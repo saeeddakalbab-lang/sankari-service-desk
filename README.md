@@ -27,11 +27,11 @@ Requires Node.js 24 or newer.
 Copy-Item .env.example .env
 npm ci
 npm run build
-npm run admin
+npm run bootstrap:local
 npm start
 ```
 
-Open `http://localhost:3000/helpdesk` or `http://localhost:3000/email`. The administrator command securely hashes the password; no default login is stored in the repository.
+Open `http://localhost:3000/helpdesk` or `http://localhost:3000/email`. Local bootstrap writes a random administrator login to the ignored `LOCAL-ACCESS.txt` file. Use `npm run admin` when you want to set or reset an administrator explicitly. Passwords are securely hashed; no default login is stored in the repository.
 
 ## Production deployment
 

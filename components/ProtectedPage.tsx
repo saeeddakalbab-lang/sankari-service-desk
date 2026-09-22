@@ -1,0 +1,2 @@
+import {redirect} from "next/navigation";import {currentUser,hasRole} from "@/lib/auth";import type {Role} from "@/lib/types";import {AppShell} from "./AppShell";
+export async function ProtectedPage({children,roles}:{children:React.ReactNode;roles?:Role[]}){const user=await currentUser();if(!user)redirect("/login");if(roles&&!hasRole(user,roles))redirect("/portal");return <AppShell user={user}>{children}</AppShell>}

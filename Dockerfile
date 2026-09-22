@@ -1,23 +1,29 @@
-FROM node:24-alpine AS build
+FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev
-COPY assets ./assets
-COPY web ./web
-COPY scripts/build.mjs ./scripts/build.mjs
+RUN npm ci
+
+FROM deps AS build
+WORKDIR /app
+COPY . .
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-FROM node:24-alpine
-ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000 DATA_DIR=/app/data
+FROM node:24-alpine AS runner
+RUN apk add --no-cache postgresql-client rclone tzdata
 WORKDIR /app
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
-COPY package.json ./
-COPY server ./server
-COPY scripts/admin.mjs scripts/backup.mjs ./scripts/
-RUN mkdir -p /app/data /app/backups && chown -R node:node /app/data /app/backups
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 HOSTNAME=0.0.0.0 PORT=3000
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
+COPY --from=build /app/db ./db
+COPY --from=build /app/scripts ./scripts
+COPY --from=build /app/lib ./lib
+COPY --from=build /app/tsconfig.json ./tsconfig.json
+RUN chmod +x scripts/entrypoint.sh scripts/backup.sh && mkdir -p /backups && chown node:node /backups
 USER node
 EXPOSE 3000
-VOLUME ["/app/data", "/app/backups"]
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["node", "server/index.js"]
+ENTRYPOINT ["./scripts/entrypoint.sh"]
+CMD ["node", "server.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

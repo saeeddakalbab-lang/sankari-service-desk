@@ -1,9 +1,10 @@
 node_modules
 .git
 .env*
-data
 backups
-dist
+.next
 test-results
 LOCAL-ACCESS.txt
 profile-*.png
+migration-input
+migration-output

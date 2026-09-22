@@ -1,4 +1,4 @@
-name: Verify service desk
+name: Verify unified platform
 on:
   push:
     branches: [main]
@@ -9,24 +9,35 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: sankari
+          POSTGRES_USER: sankari
+          POSTGRES_PASSWORD: ci-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sankari -d sankari"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://sankari:ci-password@127.0.0.1:5432/sankari
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ci-only-secret-that-is-long-enough
+      GOOGLE_CLIENT_ID: ci-client
+      GOOGLE_CLIENT_SECRET: ci-secret
+      GOOGLE_WORKSPACE_DOMAIN: sankari-holding.com
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: "24"
           cache: npm
       - run: npm ci
+      - run: npm run db:migrate
+      - run: npm run db:smoke
       - run: npm run check
       - run: npm audit --omit=dev --audit-level=high
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: browser-review
-          path: test-results/
-      - run: docker build -t sankari-service-desk:test .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: single-file-interfaces
-          path: dist/*.html
+      - run: docker build -t sankari-unified-platform:test .

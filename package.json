@@ -1,28 +1,50 @@
 {
-  "name": "sankari-service-desk",
-  "version": "1.0.0",
-  "private": true,
+  "name": "sankari-unified-platform",
+  "version": "2.0.0",
   "type": "module",
-  "engines": {
-    "node": ">=24.15.0"
-  },
+  "private": true,
   "scripts": {
-    "start": "node server/index.js",
-    "test": "node --test --test-concurrency=1 test/*.test.js",
-    "test:browser": "node test/browser.mjs",
-    "build": "node scripts/build.mjs",
-    "bootstrap:local": "node scripts/bootstrap-local.mjs",
-    "admin": "node scripts/admin.mjs",
-    "backup": "node scripts/backup.mjs",
-    "check": "npm run build && npm test"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "tsx scripts/migrate-db.ts",
+    "db:seed": "tsx scripts/seed.ts",
+    "db:smoke": "tsx scripts/smoke-db.ts",
+    "worker": "tsx scripts/worker.ts",
+    "migration:dry-run": "tsx scripts/migrate-artifacts.ts dry-run",
+    "migration:commit": "tsx scripts/migrate-artifacts.ts commit",
+    "migration:export-clickup": "tsx scripts/export-clickup.ts",
+    "check": "npm run lint && npm test && npm run build"
   },
   "dependencies": {
-    "express": "^5.1.0",
-    "helmet": "^8.1.0",
-    "multer": "^2.0.2",
-    "nodemailer": "^10.0.10"
+    "@auth/pg-adapter": "^1.11.3",
+    "@hookform/resolvers": "^5.2.2",
+    "next": "16.3.5",
+    "next-auth": "^4.24.15",
+    "nodemailer10": "npm:nodemailer@^10.0.10",
+    "pg": "^8.23.0",
+    "rate-limiter-flexible": "^11.2.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-hook-form": "^7.62.0",
+    "recharts": "^3.2.1",
+    "tsx": "^4.20.5",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.0"
-  }
+    "@playwright/test": "^1.55.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^24.0.0",
+    "@types/nodemailer": "^7.0.4",
+    "@types/pg": "^8.15.5",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "jsdom": "^27.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^5.0.1"
+  },
+  "engines": { "node": ">=24.0.0" }
 }

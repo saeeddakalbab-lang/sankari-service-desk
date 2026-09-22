@@ -1,0 +1,1 @@
+export default function NotFound(){return <main className="empty"><h1>Request not found.</h1><p>The request does not exist or your account cannot access it.</p><a className="btn" href="/portal">Return to the portal</a></main>}

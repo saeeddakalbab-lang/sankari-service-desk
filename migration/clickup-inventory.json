@@ -1,0 +1,29 @@
+{
+  "exportedAt": "2026-09-23",
+  "total": 735,
+  "unique": 735,
+  "lists": {
+    "901522764966": {
+      "name": "طلبات انشاء ايميلات",
+      "requestType": "email_account_request",
+      "count": 203,
+      "statuses": {
+        "تم التواصل": 201,
+        "قيد التخطيط": 2
+      }
+    },
+    "901522165191": {
+      "name": "طلبات الدعم الفني",
+      "requestType": "helpdesk_ticket",
+      "count": 532,
+      "statuses": {
+        "منجز": 493,
+        "جاهز": 8,
+        "يوجد عائق": 5,
+        "الطلبات الواردة": 26
+      }
+    }
+  },
+  "subscriptionApprovalSource": null,
+  "note": "Raw exports contain employee data and are intentionally excluded from Git. The source list for subscription approvals was not uniquely identified and was not guessed."
+}

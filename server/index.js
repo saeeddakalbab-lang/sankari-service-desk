@@ -1,0 +1,11 @@
+import { existsSync } from 'node:fs';
+if(existsSync('.env'))process.loadEnvFile('.env');
+const {createStore}=await import('./store.js');
+const {createApp}=await import('./app.js');
+const {startScheduler}=await import('./notifier.js');
+const baseUrl=process.env.BASE_URL||'http://localhost:3000';
+if(process.env.NODE_ENV==='production'&&(!baseUrl.startsWith('https://')||process.env.COOKIE_SECURE!=='true'))throw new Error('Production requires HTTPS BASE_URL and COOKIE_SECURE=true');
+const store=createStore(),app=createApp(store),port=Number(process.env.PORT||3000);
+const server=app.listen(port,process.env.HOST||'127.0.0.1',()=>console.log(`Sankari service desk listening at ${baseUrl}`));
+const stop=process.env.NOTIFIER_ENABLED==='false'?()=>{}:startScheduler(store,baseUrl);
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{stop();server.close(()=>{store.close();process.exit(0);});});

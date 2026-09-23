@@ -26,6 +26,8 @@ x-app-environment: &app-environment
   CLICKUP_API_TOKEN: ${CLICKUP_API_TOKEN:-}
   CLICKUP_HELPDESK_LIST_ID: ${CLICKUP_HELPDESK_LIST_ID:-901522165191}
   CLICKUP_EMAIL_LIST_ID: ${CLICKUP_EMAIL_LIST_ID:-901522764966}
+  MIGRATION_INPUT_DIR: ${MIGRATION_INPUT_DIR:-/app/migration-data/input}
+  MIGRATION_OUTPUT_DIR: ${MIGRATION_OUTPUT_DIR:-/app/migration-data/output}
   RATE_LIMIT_POINTS: ${RATE_LIMIT_POINTS:-60}
   RATE_LIMIT_DURATION: ${RATE_LIMIT_DURATION:-60}
   AUTH_DEV_BYPASS: "false"
@@ -54,6 +56,8 @@ services:
       postgres:
         condition: service_healthy
     expose: ["3000"]
+    volumes:
+      - migration_data:/app/migration-data
 
   worker:
     build: .
@@ -87,3 +91,4 @@ services:
 volumes:
   postgres_data:
   backup_data:
+  migration_data:

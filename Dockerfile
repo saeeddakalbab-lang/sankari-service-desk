@@ -21,7 +21,7 @@ COPY --from=build /app/db ./db
 COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/lib ./lib
 COPY --from=build /app/tsconfig.json ./tsconfig.json
-RUN chmod +x scripts/entrypoint.sh scripts/backup.sh && mkdir -p /backups && chown node:node /backups
+RUN chmod +x scripts/entrypoint.sh scripts/backup.sh && mkdir -p /backups /app/migration-data/input /app/migration-data/output && chown -R node:node /backups /app/migration-data
 USER node
 EXPOSE 3000
 ENTRYPOINT ["./scripts/entrypoint.sh"]

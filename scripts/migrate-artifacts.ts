@@ -6,7 +6,7 @@ import { mapClickupTask } from "../lib/migration";
 
 const mode=process.argv[2];
 if(!["dry-run","commit"].includes(mode))throw new Error("Use dry-run or commit");
-const input=path.resolve(process.env.MIGRATION_INPUT_DIR||"migration-input"),output=path.resolve(process.env.MIGRATION_OUTPUT_DIR||"migration-output");
+const input=path.resolve(process.env.MIGRATION_INPUT_DIR||"/tmp/sankari-migration/input"),output=path.resolve(process.env.MIGRATION_OUTPUT_DIR||"/tmp/sankari-migration/output");
 await mkdir(output,{recursive:true});
 function tasks(data:any):any[]{if(Array.isArray(data))return data;if(Array.isArray(data.tasks))return data.tasks;if(Array.isArray(data.results))return data.results;if(data.structuredContent)return tasks(data.structuredContent);return [];}
 

@@ -8,7 +8,7 @@ const lists=[
   {id:process.env.CLICKUP_EMAIL_LIST_ID||"901522764966",name:"email"}
 ];
 const headers={Authorization:token};
-const output=path.resolve(process.env.MIGRATION_INPUT_DIR||"migration-input");
+const output=path.resolve(process.env.MIGRATION_INPUT_DIR||"/tmp/sankari-migration/input");
 await mkdir(output,{recursive:true});
 
 for(const list of lists){

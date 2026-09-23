@@ -13,7 +13,7 @@ describe("request validation",()=>{
   it("enforces workflow status and known roles",()=>{
     expect(assertStatus("email_account_request","provisioned")).toBe("provisioned");
     expect(()=>assertStatus("email_account_request","approved")).toThrow();
-    expect(roleUpdateSchema.safeParse({roles:["board","admin"]}).success).toBe(true);
+    expect(roleUpdateSchema.safeParse({roles:["board","admin","accountant"]}).success).toBe(true);
     expect(roleUpdateSchema.safeParse({roles:["owner"]}).success).toBe(false);
   });
 });

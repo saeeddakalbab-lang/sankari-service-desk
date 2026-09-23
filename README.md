@@ -1,6 +1,6 @@
 # Sankari Holding Unified Systems Platform
 
-One self-hosted internal portal for subscription approvals, IT helpdesk requests, email-account requests, board KPIs, and a read-only Jira dashboard. The application uses Next.js, PostgreSQL, Google Workspace SSO, SMTP notifications, and a background worker.
+One self-hosted internal portal for Sankari OpsHub, subscription approvals, IT helpdesk requests, email-account requests, board KPIs, and a read-only Jira dashboard. The application uses Next.js, PostgreSQL, Google Workspace SSO, SMTP notifications, and a background worker.
 
 ## Included
 
@@ -10,6 +10,10 @@ One self-hosted internal portal for subscription approvals, IT helpdesk requests
 - Board/admin KPI dashboard: open/closed, SLA compliance, overdue queue, resolution time, volume trend, and agent workload. It refreshes every 15 seconds.
 - Dev/admin Jira dashboard with per-project and “my tasks” views. The worker refreshes Jira every 5–10 minutes.
 - Admin Settings page for assigning employee, agent, admin, board, and dev roles after a user’s first Google login.
+- Accountant role for the finance views added by the OpsHub/accounting plan.
+- OpsHub schema for companies, service catalog, subscriptions, purchase requests, contracts, invoices, payables, ledger entries, and contract assignments.
+- Pricing settings stored in the database, including standard hours, flat cost, multiplier, service salaries, installment split, and AED/USD reporting behavior.
+- Database guard rails for the updated hard constraints: card data is last-four only, and the three contract invoices must sum exactly to the contract total.
 - Rate limiting, server-side validation, domain-restricted authentication, health checks, nightly PostgreSQL backups, and optional off-server rclone copies.
 - Staged ClickUp migration with traceability, reconciliation reports, and refusal to commit incomplete mappings.
 
@@ -35,7 +39,7 @@ This requires a Google Workspace administrator for 'sankari-holding.com'.
 5. Add the authorized redirect URI exactly as 'https://YOUR-DOMAIN/api/auth/callback/google'.
 6. Put the client ID and client secret into 'GOOGLE_CLIENT_ID' and 'GOOGLE_CLIENT_SECRET' in EasyPanel.
 7. Set 'NEXTAUTH_URL=https://YOUR-DOMAIN' and keep 'GOOGLE_WORKSPACE_DOMAIN=sankari-holding.com'.
-8. Put the first administrator’s address in 'ADMIN_EMAILS'. After that person signs in, use **Settings → People and roles** to assign board, dev, and agent access.
+8. Put the first administrator’s address in 'ADMIN_EMAILS'. After that person signs in, use **Settings → People and roles** to assign board, dev, agent, and accountant access.
 
 The OAuth “Internal” audience and the application’s own verified-email/domain check both restrict login to the Workspace domain.
 
@@ -83,6 +87,21 @@ MIGRATION_BATCH_ID=<reviewed-batch-uuid> npm run migration:commit
 
 The ClickUp source for subscription approvals was not uniquely identified. It remains unimported until the exact list is provided. Existing ClickUp/Claude trackers are read-only sources and are never changed or deleted.
 
+## Latest plan update: OpsHub, contracts, and accounting
+
+The latest plan changes the merge from three trackers to four systems. Sankari OpsHub is now part of the unified platform and is larger than the original trackers. The database now has dedicated tables for OpsHub records that do not belong in the shared `requests` table:
+
+| Area | Tables |
+|---|---|
+| OpsHub registry | `companies`, `services`, `subscriptions`, `purchase_requests` |
+| Contracting | `contracts`, `contract_line_items`, `invoices` |
+| Accounting | `payables`, `ledger_entries`, `contract_assignments` |
+| Configuration | `settings` |
+
+The default pricing config is seeded into `settings`: 160 standard monthly hours, 1,000.00 flat cost, 3x multiplier, Consultant at 2,500.00 base salary, and IT Support, DevOps, and Cybersecurity at 1,000.00 base salary. These values are configuration, not code, so they can be changed later without editing the application. Existing OpsHub contracts must keep their agreed value during migration and must not be re-priced with the new formula.
+
+The migration still requires the unresolved OpsHub decisions from the plan before importing real financial data: sample vs. real records, contract quoting currency, salary currency, onsite premium, midpoint rounding, and e-signature approach. Until those are confirmed, the schema is ready but the app should not import or retire the original OpsHub artifact.
+
 ## Backups and monitoring
 
 The backup service creates a compressed PostgreSQL dump and SHA-256 checksum every 24 hours, retains local copies for 'BACKUP_RETENTION_DAYS', and copies them off-server when 'RCLONE_REMOTE' plus the 'RCLONE_CONFIG_REMOTE_*' values are supplied. The Compose example defines an S3-compatible rclone remote named 'remote'; set 'RCLONE_REMOTE=remote:your-backup-folder'. Point EasyPanel’s monitor or another uptime service at '/api/health' and send downtime alerts to the operations contact.
@@ -99,9 +118,11 @@ pg_restore --clean --if-exists --no-owner --dbname="$DATABASE_URL" /backups/sank
 |---|---|---|
 | Foundation | App, PostgreSQL schema, Docker image, EasyPanel Compose, SSO enforcement, health endpoint | Domain, HTTPS, Google Internal login |
 | Employee portal | Submission, ownership filtering, workflows, comments, SMTP outbox/worker | Real request and three delivered messages |
-| Migration | 735 ClickUp tasks exported and reconciled; PostgreSQL dry run flagged all 735 for missing required fields and committed none | Correct missing source fields, rerun/review dry run, then commit; identify subscription list |
+| Migration | 735 ClickUp tasks exported and reconciled; PostgreSQL dry run flagged all 735 for missing required fields and committed none. OpsHub tables are ready, but OpsHub data is blocked until sample/real and finance decisions are confirmed | Correct missing source fields, rerun/review dry run, then commit; identify subscription list and OpsHub real records |
 | KPI dashboard | Board/admin gate and live 15-second refresh | Assign board users and compare metrics to migrated data |
 | Jira dashboard | REST v3 sync, project scope, developer role, my-tasks view | Add credentials/projects/developers and verify live issues |
+| OpsHub port | Database schema added for companies, services, subscriptions, purchase requests, contracts, invoices, payables, ledger, and assignments | Import real OpsHub records after confirming sample filter and finance decisions; compare a known contract/invoice against the source |
+| Contracting/accounting | Pricing config, installment tables, exact invoice-sum enforcement, accountant role | Build and test the public `/contract-request` workflow after the open pricing decisions are confirmed |
 | Hardening | Rate limits, validation, security headers, non-committed secrets, backups, health check | Configure off-server rclone and uptime alert; restore drill |
 
 ## Development and automated checks

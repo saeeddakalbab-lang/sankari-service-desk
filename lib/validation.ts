@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PRIORITIES, REQUEST_TYPES, STATUS_BY_TYPE, type RequestType } from "./types";
+import { PRIORITIES, REQUEST_TYPES, ROLES, STATUS_BY_TYPE, type RequestType } from "./types";
 
 const clean=(max:number)=>z.string().trim().min(1).max(max).transform(v=>v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,""));
 export const createRequestSchema=z.object({
@@ -14,4 +14,4 @@ export const createRequestSchema=z.object({
 export const commentSchema=z.object({body:clean(8000),internal:z.boolean().default(false),version:z.number().int().positive()});
 export const transitionSchema=z.object({status:z.string(),assigneeId:z.string().uuid().nullable().optional(),version:z.number().int().positive(),details:z.record(z.string(),z.unknown()).optional()});
 export function assertStatus(type:RequestType,status:string){if(!STATUS_BY_TYPE[type].includes(status))throw new Error("Invalid status for request type");return status;}
-export const roleUpdateSchema=z.object({roles:z.array(z.enum(["employee","agent","admin","board","dev"])).min(1)});
+export const roleUpdateSchema=z.object({roles:z.array(z.enum(ROLES)).min(1)});

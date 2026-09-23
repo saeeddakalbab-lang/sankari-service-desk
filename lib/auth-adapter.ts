@@ -9,6 +9,7 @@ const rolesFor=(email:string):Role[]=>{
   if(csv(process.env.BOARD_EMAILS).has(e))roles.add("board");
   if(csv(process.env.AGENT_EMAILS).has(e))roles.add("agent");
   if(csv(process.env.DEV_EMAILS).has(e))roles.add("dev");
+  if(csv(process.env.ACCOUNTANT_EMAILS).has(e))roles.add("accountant");
   return [...roles];
 };
 const user=(r:any):AdapterUser&{roles:Role[]}=>({id:r.id,email:r.email,name:r.name,image:r.image,emailVerified:r.email_verified,roles:r.roles});

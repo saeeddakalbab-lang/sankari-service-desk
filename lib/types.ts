@@ -2,7 +2,7 @@ export const REQUEST_TYPES=["subscription_approval","helpdesk_ticket","email_acc
 export type RequestType=typeof REQUEST_TYPES[number];
 export const PRIORITIES=["low","medium","high","urgent"] as const;
 export type Priority=typeof PRIORITIES[number];
-export const ROLES=["employee","agent","admin","board","dev"] as const;
+export const ROLES=["employee","agent","admin","board","dev","accountant"] as const;
 export type Role=typeof ROLES[number];
 export const STATUS_BY_TYPE:Record<RequestType,readonly string[]>={
   subscription_approval:["new","pending_manager","pending_finance","approved","rejected","cancelled","closed","reopened"],

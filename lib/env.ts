@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-const optionalUrl=z.preprocess(v=>v===""?undefined:v,z.string().url().optional());
+const optionalUrl=z.preprocess(v=>{
+  if(typeof v!=="string")return v;
+  const trimmed=v.trim();
+  if(!trimmed)return undefined;
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)?trimmed:`https://${trimmed}`;
+},z.string().url().optional());
 const optionalEmail=z.preprocess(v=>v===""?undefined:v,z.string().email().optional());
 const envSchema=z.object({
   NODE_ENV:z.enum(["development","test","production"]).default("development"),

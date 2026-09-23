@@ -7,8 +7,22 @@ import { mapClickupTask } from "../lib/migration";
 const mode=process.argv[2];
 if(!["dry-run","commit"].includes(mode))throw new Error("Use dry-run or commit");
 const input=path.resolve(process.env.MIGRATION_INPUT_DIR||"/tmp/sankari-migration/input"),output=path.resolve(process.env.MIGRATION_OUTPUT_DIR||"/tmp/sankari-migration/output");
+const legacyFallback=process.env.MIGRATION_LEGACY_FALLBACK==="true";
 await mkdir(output,{recursive:true});
 function tasks(data:any):any[]{if(Array.isArray(data))return data;if(Array.isArray(data.tasks))return data.tasks;if(Array.isArray(data.results))return data.results;if(data.structuredContent)return tasks(data.structuredContent);return [];}
+function legacyTarget(mapped:ReturnType<typeof mapClickupTask>){
+  if(!legacyFallback||!mapped.target)return mapped;
+  const taskId=(mapped.sourceId||randomUUID()).replace(/[^a-zA-Z0-9._-]/g,"").slice(0,64)||"unknown";
+  const warnings=[...mapped.warnings,"Legacy fallback import enabled; missing required fields were filled with visible placeholder values"];
+  const target={...mapped.target,details:{...mapped.target.details,migrationWarnings:warnings,legacyFallback:true}};
+  if(!target.requester_name)target.requester_name="Unknown legacy requester";
+  if(!target.requester_email)target.requester_email=`legacy-clickup+${taskId}@sankari-holding.com`;
+  if(!target.department)target.department="Unspecified";
+  if(!target.company)target.company="Legacy ClickUp";
+  if(!target.created_at)target.created_at=new Date().toISOString();
+  if(!target.sla_due_at)target.sla_due_at=null;
+  return {...mapped,target,warnings,valid:true};
+}
 
 if(mode==="dry-run"){
   const allFiles=(await readdir(input)).filter(f=>f.endsWith(".json"));
@@ -21,7 +35,7 @@ if(mode==="dry-run"){
     const rows=tasks(JSON.parse(await readFile(path.join(input,file),"utf8")));
     let valid=0,flagged=0,duplicates=0;
     for(const raw of rows){
-      const mapped=mapClickupTask(raw);
+      const mapped=legacyTarget(mapClickupTask(raw));
       if(mapped.sourceId&&seen.has(mapped.sourceId)){duplicates++;continue;}
       if(mapped.sourceId)seen.add(mapped.sourceId);
       await pool.query(`INSERT INTO migration_staging(batch_id,source,source_id,target_data,warnings,valid) VALUES($1,$2,$3,$4,$5,$6)`,[batch,file,mapped.sourceId,JSON.stringify(mapped.target),JSON.stringify(mapped.warnings),mapped.valid]);

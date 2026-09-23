@@ -60,7 +60,7 @@ if(mode==="dry-run"){
     const rows=await client.query(`SELECT * FROM migration_staging WHERE batch_id=$1 AND valid AND committed_request_id IS NULL FOR UPDATE`,[batch]);
     for(const row of rows.rows){
       const d=row.target_data;
-      const r=await client.query(`INSERT INTO requests(type,requester_name,requester_email,department,company,subject,description,priority,status,created_at,sla_due_at,resolved_at,closed_at,details,import_source,import_id,import_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,coalesce($11,$10::timestamptz+interval '72 hours'),$12,$13,$14,$15,$16,$17) ON CONFLICT(import_source,import_id) DO UPDATE SET updated_at=now() RETURNING id`,[d.type,d.requester_name,d.requester_email,d.department,d.company,d.subject,d.description,d.priority,d.status,d.created_at,d.sla_due_at,d.resolved_at,d.closed_at,d.details,d.import_source,d.import_id,d.import_url]);
+      const r=await client.query(`INSERT INTO requests(type,requester_name,requester_email,department,company,subject,description,priority,status,created_at,sla_due_at,resolved_at,closed_at,details,import_source,import_id,import_url) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,coalesce($11,$10::timestamptz+interval '72 hours'),$12,$13,$14,$15,$16,$17) ON CONFLICT(import_source,import_id) WHERE import_source IS NOT NULL AND import_id IS NOT NULL DO UPDATE SET updated_at=now() RETURNING id`,[d.type,d.requester_name,d.requester_email,d.department,d.company,d.subject,d.description,d.priority,d.status,d.created_at,d.sla_due_at,d.resolved_at,d.closed_at,d.details,d.import_source,d.import_id,d.import_url]);
       await client.query(`UPDATE migration_staging SET committed_request_id=$2 WHERE id=$1`,[row.id,r.rows[0].id]);
     }
     await client.query("COMMIT");

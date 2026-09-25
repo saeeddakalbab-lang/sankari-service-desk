@@ -32,9 +32,22 @@ If the first query returns `UNIQUE NULLS NOT DISTINCT (import_source, import_id)
 hold only **one** portal-submitted request, and every later submission fails with "Request could
 not be completed". Step A fixes that.
 
-## 1. Dump (before every step)
+## Shell setup (paste once per console session)
 
-From a shell that can reach the production database (the `backup` service container has `pg_dump`):
+The app image is Alpine: it has `psql`, `pg_dump`, `pg_restore` and `node`, but **no `curl`**, and
+no local Postgres server (so `createdb` with no address fails). Paste this first, in the app
+container's console, with the step number you are on:
+
+```sh
+export STEP=011                     # the migration number of this step
+export REH_URL=$(node -e 'const u=new URL(process.env.DATABASE_URL);u.pathname="/sankari_rehearsal";console.log(u.href)')
+check() { node -e 'fetch(process.argv[1],{method:process.argv[2]||"GET",redirect:"manual"}).then(async r=>console.log(r.status,r.headers.get("location")||"",(await r.text()).slice(0,100))).catch(e=>{console.log("DOWN",e.message);process.exit(1)})' "$@"; }
+```
+
+`REH_URL` is the production server with the database name swapped to `sankari_rehearsal`; it never
+points at the live database. `check URL` prints the HTTP status (use `check URL POST` for a POST).
+
+## 1. Dump (before every step)
 
 ```sh
 TS=$(date -u +%Y%m%dT%H%M%SZ)
@@ -43,25 +56,37 @@ sha256sum /backups/sankari-pre-$STEP-$TS.dump > /backups/sankari-pre-$STEP-$TS.d
 pg_restore --list /backups/sankari-pre-$STEP-$TS.dump | grep -c "TABLE DATA"   # must be > 0
 ```
 
-Copy it off the server (`rclone copy /backups "$RCLONE_REMOTE"`) and write down the path.
+Write down the file name (`ls -l /backups`). Then copy it off the server
+(`rclone copy /backups "$RCLONE_REMOTE"`), or download it from EasyPanel: unless `/backups` is a
+mounted volume, **the next deploy deletes it** with the old container.
 
 ## 2. Rehearse on a restored copy (before every step)
 
-On any Postgres 17 you control, never on production:
+A separate database, `sankari_rehearsal`, on the same Postgres server. The live database is not
+touched: every command below uses `$REH_URL`.
 
 ```sh
-createdb sankari_rehearsal
-pg_restore --no-owner --dbname=postgresql://…/sankari_rehearsal /path/to/sankari-pre-$STEP-$TS.dump
-DATABASE_URL=postgresql://…/sankari_rehearsal npm run db:report       # before
-DATABASE_URL=postgresql://…/sankari_rehearsal npm run db:migrate
-DATABASE_URL=postgresql://…/sankari_rehearsal npm run db:guards       # step B only; rolls itself back
-DATABASE_URL=postgresql://…/sankari_rehearsal npm run db:report       # after: compare counts
+DUMP=$(ls -t /backups/sankari-pre-*.dump | head -1); echo "$DUMP"   # the dump from section 1
+psql "$DATABASE_URL" -c 'DROP DATABASE IF EXISTS sankari_rehearsal' -c 'CREATE DATABASE sankari_rehearsal'
+pg_restore --no-owner --exit-on-error --dbname="$REH_URL" "$DUMP"
+DATABASE_URL="$REH_URL" npm run db:report       # before
+DATABASE_URL="$REH_URL" npm run db:migrate
+DATABASE_URL="$REH_URL" npm run db:guards       # rolls itself back
+DATABASE_URL="$REH_URL" npm run db:report       # after: compare counts
 ```
+
+The `DROP DATABASE` line only ever names `sankari_rehearsal`, the throwaway copy. If `CREATE DATABASE`
+says permission denied, the app's database user can't create databases: run the same two lines in
+EasyPanel's Postgres service console as the `postgres` user.
+
+**`db:migrate` only applies the migrations inside the image you run it from.** The running image is
+the old one, so for a new step it applies nothing. To rehearse new migrations (011–013), see
+"Rehearsing 011–013 with a staging app" below.
 
 Stop if the migration fails or any count changes that you didn't expect. Send me the output: if a
 constraint conflicts with existing rows, the offending rows get reported, not coerced.
 For step B, also test the rollback on the rehearsal copy:
-`psql … -v ON_ERROR_STOP=1 -f db/rollback/004_approval_line.down.sql`, then run `db:migrate` again.
+`psql "$REH_URL" -v ON_ERROR_STOP=1 -f db/rollback/004_approval_line.down.sql`, then run `db:migrate` again.
 
 ## 3. Deploy step A (003 only)
 
@@ -69,7 +94,7 @@ Build an image from the commit that contains 003 but **not** 004 (or temporarily
 `004_approval_line.sql` out of `db/migrations/` for this build). Deploy it in EasyPanel, then:
 
 ```sh
-curl -fsS https://it-portal.sankari-holding.com/api/health     # {"ok":true,...}
+check https://it-portal.sankari-holding.com/api/health     # 200 {"ok":true,...}
 ```
 
 Submit two helpdesk tickets from the portal. Both must save. Check the app logs for
@@ -80,9 +105,9 @@ Submit two helpdesk tickets from the portal. Both must save. Check the app logs 
 Repeat sections 1 and 2 with `STEP=004`. Deploy the full image, then:
 
 ```sh
-curl -fsS https://it-portal.sankari-holding.com/api/health
-curl -s -o /dev/null -w '%{http_code}\n' https://it-portal.sankari-holding.com/api/approvals   # 401
-curl -s -o /dev/null -w '%{http_code}\n' https://it-portal.sankari-holding.com/api/requests    # 401
+check https://it-portal.sankari-holding.com/api/health
+check https://it-portal.sankari-holding.com/api/approvals   # 401
+check https://it-portal.sankari-holding.com/api/requests    # 401
 ```
 
 The approval line is **off** after deploy (`settings.approvals = {"enabled":false}`), so behaviour
@@ -151,9 +176,9 @@ Running the app needs no outbound access for fonts.
 ## Checks after deploy
 
 ```sh
-curl -fsS https://it-portal.sankari-holding.com/api/health
-curl -s -o /dev/null -w '%{http_code}\n' https://it-portal.sankari-holding.com/api/oversight/stuck   # 401
-curl -s -o /dev/null -w '%{http_code}\n' https://it-portal.sankari-holding.com/api/me/preferences    # 401
+check https://it-portal.sankari-holding.com/api/health
+check https://it-portal.sankari-holding.com/api/oversight/stuck   # 401
+check https://it-portal.sankari-holding.com/api/me/preferences    # 401
 ```
 
 Then sign in as an admin: set the Owner and Board in **Admin settings → People and approvals**, add
@@ -178,10 +203,10 @@ guards held" (it includes the skip section and rolls itself back).
 Checks after each deploy:
 
 ```sh
-curl -fsS https://it-portal.sankari-holding.com/api/health
-curl -s -o /dev/null -w '%{http_code}\n' https://it-portal.sankari-holding.com/api/admin/rules     # 401 (D)
-curl -s -o /dev/null -w '%{http_code}\n' -X POST https://it-portal.sankari-holding.com/api/requests/00000000-0000-4000-8000-000000000000/skip   # 401 (E)
-curl -s -o /dev/null -w '%{http_code}\n' https://it-portal.sankari-holding.com/api/admin/people    # 401 (F)
+check https://it-portal.sankari-holding.com/api/health
+check https://it-portal.sankari-holding.com/api/admin/rules     # 401 (D)
+check https://it-portal.sankari-holding.com/api/requests/00000000-0000-4000-8000-000000000000/skip POST   # 401 (E)
+check https://it-portal.sankari-holding.com/api/admin/people    # 401 (F)
 ```
 
 Then, signed in as an admin: open **Admin settings → Rules** and check the values match the table
@@ -208,10 +233,10 @@ outstanding link invalid, which is safe: they just say "not valid".
 Checks after deploy:
 
 ```sh
-curl -fsS https://it-portal.sankari-holding.com/api/health
-curl -s -o /dev/null -w '%{http_code}\n' https://it-portal.sankari-holding.com/api/notifications/tickets   # 401
-curl -s -o /dev/null -w '%{http_code}\n' -X POST https://it-portal.sankari-holding.com/api/actions/x         # 401
-curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://it-portal.sankari-holding.com/actions/x      # 307 to /login
+check https://it-portal.sankari-holding.com/api/health
+check https://it-portal.sankari-holding.com/api/notifications/tickets   # 401
+check https://it-portal.sankari-holding.com/api/actions/x POST         # 401
+check https://it-portal.sankari-holding.com/actions/x      # 307 to /login
 ```
 
 Then submit one test helpdesk ticket as an employee. Check that an agent with the queue open sees a toast
@@ -239,10 +264,44 @@ Deploy the worker together with the web app, then run one pass by hand: `npx tsx
 Existing subscriptions have no owner, so the worker skips them until an admin assigns one.
 
 ```sh
-curl -fsS https://it-portal.sankari-holding.com/api/health
-curl -s -o /dev/null -w '%{http_code}\n' https://it-portal.sankari-holding.com/api/subscriptions   # 401
-curl -s -o /dev/null -w '%{http_code}\n' https://it-portal.sankari-holding.com/api/bills/csv       # 401
+check https://it-portal.sankari-holding.com/api/health
+check https://it-portal.sankari-holding.com/api/subscriptions   # 401
+check https://it-portal.sankari-holding.com/api/bills/csv       # 401
 ```
+
+# Rehearsing 011–013 with a staging app
+
+The live container holds the old code, which has no 011–013, so rehearse them with a second,
+temporary EasyPanel app that runs the new code against the `sankari_rehearsal` copy:
+
+1. Take the dump (section 1) with `STEP=011`, restore it into `sankari_rehearsal` (section 2, up to
+   the first `db:report`), and keep the report output.
+2. In EasyPanel, create an app `it-portal-staging` from the GitHub repo, branch
+   `unified-platform-rebuild`, same Dockerfile. Copy the live app's environment, then change:
+   - `DATABASE_URL`: the `$REH_URL` value (run `echo "$REH_URL"` in the live console).
+   - `SMTP_HOST`: empty. Also **do not create a worker** for staging. The copy holds real queued
+     emails and real addresses, and nothing must reach anyone from it.
+   - No domain is needed.
+3. Deploy it. On start it applies 011, 012 and 013 **to the copy only**; its log shows
+   `Applied 011_…`, `Applied 012_…`, `Applied 013_…`.
+4. In the **staging** console: `npm run db:guards`, then `npm run db:report`. Compare with step 1.
+   Also `npx tsx scripts/import-statement-subscriptions.ts` (dry run, changes nothing) and send me
+   the output.
+5. Rollback test, in the staging console, newest first:
+   ```sh
+   for m in 013_contracts_ledger 012_statements_beneficiary 011_subscription_aed_rate; do
+     psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/rollback/$m.down.sql || break; done
+   npm run db:migrate    # applies all three again
+   ```
+6. Delete the staging app. Then deploy for real: **merge the branch into `main`** (EasyPanel
+   rebuilds the live app from it). Because the live app applies all three on start, take a fresh
+   dump right before the merge. After it is live:
+   ```sh
+   check https://it-portal.sankari-holding.com/api/health            # 200
+   check https://it-portal.sankari-holding.com/api/statements         # 401
+   check https://it-portal.sankari-holding.com/contract-request       # 200
+   ```
+   Then do the "After" parts of steps I, J and K below, in order.
 
 # Step I: frozen AED rate, and importing the card-statement subscriptions (migration 011)
 
@@ -253,7 +312,8 @@ Same routine: dump with `STEP=011`, rehearse on a restored copy including
 |---|---|---|
 | `011_subscription_aed_rate.sql` | Adds nullable `subscriptions.aed_rate` (must be > 0). A subscription billed in EUR, CHF, GBP or TRY renews at this frozen rate; without one, renewal is refused rather than guessed. No row changes. | `db/rollback/011_subscription_aed_rate.down.sql`: refuses once any subscription has a rate. |
 
-After 011 is live, import the 17 recurring subscriptions from the closed Mashreq card (*9425):
+After 011 is live, import the recurring subscriptions from the closed Mashreq card (*9425) and the
+10 Hostinger plans:
 
 1. Check **Admin settings → People** has exactly one active **Owner**. The script refuses otherwise.
 2. Dry run in the app container. Read the list; it changes nothing:

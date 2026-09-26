@@ -4,7 +4,8 @@ import { refFor } from "./format";
 import type { RequestRecord } from "./types";
 
 export async function queueMail(event:string,request:RequestRecord,recipient:string,title:string,body:string){
-  if(!recipient)return;
+  // Requests imported from ClickUp without a requester carry a placeholder address; nobody reads it.
+  if(!recipient||/^legacy-clickup\+/i.test(recipient))return;
   const url=new URL(`/requests/${request.id}`,process.env.NEXTAUTH_URL||"http://localhost:3000").href;
   const ref=refFor(request.type,request.id,String(request.created_at)),prio=PRIORITY_LABEL[request.priority]??request.priority;
   const subject=`[Sankari] ${title}: ${request.subject}`;

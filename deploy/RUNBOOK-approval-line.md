@@ -6,6 +6,13 @@ Target: https://it-portal.sankari-holding.com (EasyPanel, Docker Compose). Treat
 every start, so **deploying an image applies its pending migrations right away**. Take the dump
 before you deploy, never after.
 
+**Email needs a second service.** The web app only queues email in `email_outbox`; a separate
+worker service sends it (and runs reminders, SLA alerts and the monthly statement). In EasyPanel it
+is its own service built from the same repo and branch, with the same environment as the app
+(`DATABASE_URL`, `NEXTAUTH_URL`, all `SMTP_*`) and the command
+`node_modules/.bin/tsx scripts/worker.ts`. If emails sit in `pending` with `attempts = 0`, the
+worker is not running.
+
 Two changes, deployed separately:
 
 | Step | Migration | What it does | Risk |

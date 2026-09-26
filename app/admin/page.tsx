@@ -1,3 +1,23 @@
-import {ProtectedPage} from "@/components/ProtectedPage";import {RequestTable} from "@/components/RequestTable";import {currentUser} from "@/lib/auth";import {listRequests} from "@/lib/requests";
+import { ProtectedPage } from "@/components/ProtectedPage";
+import { RequestList } from "@/components/RequestList";
+import { listRequests } from "@/lib/requests";
+import { toRows } from "@/lib/rows";
+import { getViewer } from "@/lib/view";
+
 export const dynamic="force-dynamic";
-export default async function Admin(){const user=await currentUser(),rows=user?await listRequests(user,true):[];const open=rows.filter(r=>!r.resolved_at&&!r.closed_at),overdue=open.filter(r=>new Date(r.sla_due_at)<new Date());return <ProtectedPage roles={["agent","admin"]}><div className="heading"><div><div className="eyebrow">Operations queue</div><h1>Every request. One queue.</h1><p>Assign work, update status and keep the history accurate.</p></div></div><div className="stats"><div className="stat accent"><small>Total</small><strong>{rows.length}</strong></div><div className="stat"><small>Open</small><strong>{open.length}</strong></div><div className="stat"><small>Overdue</small><strong>{overdue.length}</strong></div><div className="stat"><small>Unassigned</small><strong>{open.filter(r=>!r.assignee_id).length}</strong></div><div className="stat"><small>Resolved</small><strong>{rows.filter(r=>r.resolved_at).length}</strong></div></div><RequestTable rows={rows}/></ProtectedPage>}
+export default async function TeamQueue(){
+  const {user,t}=await getViewer();
+  const isTeam=!!user&&(user.roles.includes("agent")||user.roles.includes("admin"));
+  const rows=isTeam?await toRows(await listRequests(user!,true)):[];
+  const open=rows.filter(r=>!r.line.finished&&r.status!=="rejected");
+  return <ProtectedPage roles={["agent","admin"]}>
+    <header className="stack-s"><h1>{t("q.title")}</h1><p className="lead soft">{t("q.lead")}</p></header>
+    <section aria-label={t("dash.summary")} className="grid-4">
+      <div className="tile"><div className="tile-label">{t("q.total")}</div><div className="tile-num">{rows.length}</div></div>
+      <div className="tile"><div className="tile-label">{t("q.open")}</div><div className="tile-num">{open.length}</div></div>
+      <div className={`tile${open.some(r=>r.overdue)?" alert":""}`}><div className="tile-label">{t("q.overdue")}</div><div className="tile-num">{open.filter(r=>r.overdue).length}</div></div>
+      <div className="tile"><div className="tile-label">{t("q.unassigned")}</div><div className="tile-num">{open.filter(r=>!r.assignee_name&&r.status!=="awaiting_approval").length}</div></div>
+    </section>
+    <RequestList rows={rows} title={t("q.title")} team/>
+  </ProtectedPage>;
+}

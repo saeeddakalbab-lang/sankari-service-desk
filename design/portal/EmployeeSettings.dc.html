@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My settings (dark mode)</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;family=IBM+Plex+Sans+Arabic:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#E6EBF0;background:#0E1318}
+a{color:#6CB8CB}a:hover{color:#94CEDC}
+a:focus-visible,button:focus-visible,input:focus-visible{outline:3px solid #6CB8CB;outline-offset:2px}
+</style>
+</helmet>
+<div style="width: 1440px; height: 920px; display: flex; background: #0E1318; color: #E6EBF0;">
+
+<nav aria-label="Main" style="width: 248px; flex-shrink: 0; box-sizing: border-box; padding: 28px 16px; background: #161D24; border-right: 1px solid #2A343E; display: flex; flex-direction: column; gap: 28px;">
+<div style="padding: 0 12px; display: flex; flex-direction: column; gap: 2px;">
+<div style="font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 28px; color: #94CEDC; letter-spacing: -0.01em;">Sankari</div>
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #8E9AA6;">Unified platform</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px;">
+<a href="Main.dc.html" style="min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; color: #B7C1CA; font-weight: 500; font-size: 15px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>Dashboard</a>
+<a href="HelpdeskForm.dc.html" style="min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; color: #B7C1CA; font-weight: 500; font-size: 15px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New request</a>
+<a href="RequestDetail.dc.html" style="min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; color: #B7C1CA; font-weight: 500; font-size: 15px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>My requests</a>
+<a href="EmployeeSettings.dc.html" aria-current="page" style="min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; background: #16353D; color: #94CEDC; font-weight: 600; font-size: 15px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg>Settings</a>
+</div>
+<div style="margin-top: auto; display: flex; align-items: center; gap: 12px; padding: 12px; border-top: 1px solid #2A343E;">
+<div aria-hidden="true" style="width: 40px; height: 40px; border-radius: 50%; background: #16353D; color: #94CEDC; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px;">RS</div>
+<div style="display: flex; flex-direction: column; gap: 2px;">
+<div style="font-size: 14px; font-weight: 600;">Rana Saleh</div>
+<div style="font-size: 13px; color: #8E9AA6;">Marketing · Employee</div>
+</div>
+</div>
+</nav>
+
+<main style="flex-grow: 1; box-sizing: border-box; padding: 40px 48px; display: flex; flex-direction: column; gap: 28px;">
+<header style="display: flex; flex-direction: column; gap: 6px;">
+<h1 style="margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 40px; line-height: 1.1;">My settings</h1>
+<p style="margin: 0; font-size: 15px; color: #B7C1CA;">Saved to your account, so they follow you to any device.</p>
+</header>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start;">
+<fieldset style="margin: 0; background: #161D24; border: 1px solid #2A343E; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+<legend style="float: left; padding: 0; margin-bottom: 4px; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 22px; color: #E6EBF0;">Appearance</legend>
+<label style="min-height: 56px; box-sizing: border-box; padding: 0 16px; border: 1px solid #2A343E; border-radius: 10px; display: flex; align-items: center; gap: 14px; cursor: pointer;"><input type="radio" name="theme" value="light" style="width: 18px; height: 18px; margin: 0; accent-color: #6CB8CB;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B7C1CA" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg><span style="font-size: 15px; font-weight: 500;">Light</span></label>
+<label style="min-height: 56px; box-sizing: border-box; padding: 0 16px; border: 2px solid #6CB8CB; border-radius: 10px; background: #16353D; display: flex; align-items: center; gap: 14px; cursor: pointer;"><input type="radio" name="theme" value="dark" checked style="width: 18px; height: 18px; margin: 0; accent-color: #6CB8CB;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94CEDC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg><span style="font-size: 15px; font-weight: 600; color: #94CEDC;">Dark</span></label>
+<label style="min-height: 56px; box-sizing: border-box; padding: 0 16px; border: 1px solid #2A343E; border-radius: 10px; display: flex; align-items: center; gap: 14px; cursor: pointer;"><input type="radio" name="theme" value="system" style="width: 18px; height: 18px; margin: 0; accent-color: #6CB8CB;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B7C1CA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg><span style="display: flex; flex-direction: column;"><span style="font-size: 15px; font-weight: 500;">Follow my device</span><span style="font-size: 13px; color: #8E9AA6;">Switches with your computer’s setting</span></span></label>
+</fieldset>
+
+<fieldset style="margin: 0; background: #161D24; border: 1px solid #2A343E; border-radius: 12px; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+<legend style="float: left; padding: 0; margin-bottom: 4px; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 22px; color: #E6EBF0;">Language</legend>
+<label style="min-height: 56px; box-sizing: border-box; padding: 0 16px; border: 2px solid #6CB8CB; border-radius: 10px; background: #16353D; display: flex; align-items: center; gap: 14px; cursor: pointer;"><input type="radio" name="lang" value="en" checked style="width: 18px; height: 18px; margin: 0; accent-color: #6CB8CB;"><span style="font-size: 15px; font-weight: 600; color: #94CEDC;">English</span></label>
+<label lang="ar" dir="rtl" style="min-height: 56px; box-sizing: border-box; padding: 0 16px; border: 1px solid #2A343E; border-radius: 10px; display: flex; align-items: center; gap: 14px; cursor: pointer;"><input type="radio" name="lang" value="ar" style="width: 18px; height: 18px; margin: 0; accent-color: #6CB8CB;"><span style="font-family: 'IBM Plex Sans Arabic', sans-serif; font-size: 16px; font-weight: 600;">العربية</span></label>
+<div style="display: flex; gap: 10px; padding: 14px 16px; border-radius: 8px; background: #0E1318; font-size: 13px; line-height: 1.5; color: #B7C1CA;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B7C1CA" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0; margin-top: 1px;"><path d="M3 12h18M14 5l7 7-7 7"></path></svg><span>Arabic switches the whole portal to right-to-left. Reference numbers, amounts and dates stay left-to-right so they read correctly.</span></div>
+</fieldset>
+</div>
+
+<div style="display: flex; justify-content: flex-end; gap: 12px;">
+<button type="button" style="min-height: 44px; padding: 0 22px; border: 0; border-radius: 8px; background: #6CB8CB; color: #0E1318; font: 600 15px 'IBM Plex Sans', sans-serif; cursor: pointer;">Save settings</button>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":920}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

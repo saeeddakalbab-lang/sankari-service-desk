@@ -20,7 +20,8 @@ try{
 }finally{client.release();}
 await query(`INSERT INTO subscriptions(name,card_last4) VALUES('Valid card sample','4471')`);
 try{
-  await query(`INSERT INTO subscriptions(name,card_last4) VALUES('Invalid card sample','4111111111111111')`);
+  // Bound parameter, as the app sends it: PostgreSQL logs failing statement text, not parameters.
+  await query(`INSERT INTO subscriptions(name,card_last4) VALUES('Invalid card sample',$1)`,["4111111111111111"]);
   throw new Error("Full card number was accepted");
 }catch(e){
   if(e instanceof Error && e.message==="Full card number was accepted")throw e;

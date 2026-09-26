@@ -38,6 +38,7 @@ jobs:
       - run: npm ci
       - run: npm run db:migrate
       - run: npm run db:smoke
+      - run: npm run db:guards
       - run: npm run check
       - run: npm audit --omit=dev --audit-level=high
       - run: docker build -t sankari-unified-platform:test .

@@ -43,7 +43,7 @@ export function KpiDashboard({initial}:{initial:Kpis}){
       <div className={`tile${s.overdue?" alert":""}`}><div className="tile-label">{s.overdue?<IconWarn size={14}/>:null}{t("kpi.overdue")}</div><div className="tile-num" style={{fontSize:36}}>{s.overdue}</div><div className="tile-sub">{t("kpi.overdueSub")}</div></div>
       <div className="tile"><div className="tile-label">{t("kpi.resolution")}</div><div className="row" style={{alignItems:"baseline"}}><span className="tile-num" style={{fontSize:36}}>{fmtH(s.median_resolution_hours)}</span><span className="soft" style={{fontSize:13}}>{t("kpi.median")}</span></div><div className="tile-sub">{t("kpi.avg",{h:fmtH(s.avg_resolution_hours)})}</div></div>
     </section>
-    <div className="split" style={{gridTemplateColumns:"minmax(0,1fr) 420px"}}>
+    <div className="split split-kpi">
       <section className="card card-pad stack" aria-labelledby="vol-h">
         <div className="row" style={{justifyContent:"space-between",alignItems:"baseline"}}><h2 id="vol-h" style={{fontSize:20}}>{t("kpi.volume")}</h2><span className="soft" style={{fontSize:13}}>{t("kpi.volumeSub")}</span></div>
         <figure className="stack-s" style={{margin:0}} aria-label={byWeek.map(b=>`${label(b.w)}: ${b.total}`).join(", ")} role="img">
@@ -58,7 +58,7 @@ export function KpiDashboard({initial}:{initial:Kpis}){
       </section>
       <section className="card card-pad stack" aria-labelledby="load-h">
         <div className="stack-s" style={{gap:2}}><h2 id="load-h" style={{fontSize:20}}>{t("kpi.workload")}</h2><span className="soft" style={{fontSize:13}}>{t("kpi.workloadSub")}</span></div>
-        <dl className="hbars">{data.workload.map(w=><div key={w.agent}><dt className={w.agent==="Unassigned"?"soft":""}>{w.agent==="Unassigned"?t("det.unassigned"):w.agent}</dt><dd><div className={`hbar${w.agent==="Unassigned"?" warn":""}`} style={{width:`${Math.max(4,w.open/agentMax*100)}%`}}/></dd><dd className="mono" style={{textAlign:"end"}}>{w.open}</dd></div>)}</dl>
+        {data.workload.length===0&&<p className="soft">{t("kpi.noWorkload")}</p>}<dl className="hbars">{data.workload.map(w=><div key={w.agent}><dt className={w.agent==="Unassigned"?"soft":""}>{w.agent==="Unassigned"?t("det.unassigned"):w.agent}</dt><dd><div className={`hbar${w.agent==="Unassigned"?" warn":""}`} style={{width:`${Math.max(4,w.open/agentMax*100)}%`}}/></dd><dd className="mono" style={{textAlign:"end"}}>{w.open}</dd></div>)}</dl>
       </section>
     </div>
     <section className="card" aria-labelledby="od-h">

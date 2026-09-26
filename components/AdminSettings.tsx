@@ -51,7 +51,7 @@ export function AdminSettings({accent:initialAccent,defaultTheme:initialTheme,do
     <div className="grid-2" style={{alignItems:"start",gap:24}}>
       <section className="card card-pad stack" aria-labelledby="brand-h">
         <h2 id="brand-h">{t("adm.brand")}</h2><p className="soft" style={{fontSize:14}}>{t("adm.brandLead")}</p>
-        <fieldset><legend className="sr-only">{t("adm.brand")}</legend><div className="choices grid-2">
+        <fieldset><legend className="sr-only">{t("adm.brand")}</legend><div className="choices swatches">
           {PRESETS.map(([name,hex])=><label key={hex} className="choice"><input type="radio" name="accent" checked={!custom&&accent===hex} onChange={()=>{setAccent(hex);setCustom("");}}/><span className="swatch" style={{background:hex}} aria-hidden="true"/><span><span style={{fontWeight:600,fontSize:14}}>{name}</span><span className="sub mono">{ratioLabel(checkAccent(hex).ratio)}:1</span></span></label>)}
         </div></fieldset>
         <div className="field"><label className="label" htmlFor="custom">{t("adm.custom")}</label>

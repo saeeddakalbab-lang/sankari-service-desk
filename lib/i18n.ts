@@ -453,6 +453,8 @@ const en = {
   "ct.h.invoice_paid": "Payment recorded",
   "ct.h.invoice_issued": "Invoice issued",
   "ct.h.assignment_added": "Staff assigned",
+  "kpi.noWorkload": "No open requests with IT right now.",
+  "subs.noneAdmin": "No subscriptions yet. Record one from an approved request below, or import the card list.",
   "q.title": "Team queue", "q.lead": "Every request. Assign work, update status and keep the history accurate.",
   "q.total": "Total", "q.open": "Open", "q.overdue": "Overdue", "q.unassigned": "Unassigned",
 
@@ -901,6 +903,8 @@ const ar: Record<Key, string> = {
   "ct.h.invoice_paid": "سُجّل الدفع",
   "ct.h.invoice_issued": "صدرت فاتورة",
   "ct.h.assignment_added": "أُسند موظف",
+  "kpi.noWorkload": "لا توجد طلبات مفتوحة لدى تقنية المعلومات الآن.",
+  "subs.noneAdmin": "لا توجد اشتراكات بعد. سجّل اشتراكًا من طلب معتمد أدناه، أو استورد قائمة البطاقة.",
   "q.title": "قائمة الفريق", "q.lead": "كل الطلبات. أسند العمل وحدّث الحالة وحافظ على دقة السجل.",
   "q.total": "الإجمالي", "q.open": "مفتوحة", "q.overdue": "متأخرة", "q.unassigned": "غير مُسندة",
 

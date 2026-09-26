@@ -26,7 +26,7 @@ export function StatementView({ s, admin, today }: { s: Statement; admin: boolea
   return <div className="stack">
     <div className="grid-4">
       {([["st2.opening", s.openingAedCents], ["st2.charges", s.chargesAedCents], ["st2.credits", s.creditsAedCents], ["st2.closing", s.closingAedCents]] as [I18nKey, string][]).map(([k, v]) =>
-        <div key={k} className="card card-pad stat"><span className="soft" style={{ fontSize: 13 }}>{t(k)}</span><strong className="mono" dir="ltr" style={{ fontSize: 22 }}>{aed(v)}</strong></div>)}
+        <div key={k} className="tile"><span className="tile-label">{t(k)}</span><strong className="tile-num" dir="ltr" style={{ fontSize: 22, whiteSpace: "nowrap" }}>{aed(v)}</strong></div>)}
     </div>
 
     {admin && <section className="card card-pad stack-s no-print" aria-labelledby="send-h">

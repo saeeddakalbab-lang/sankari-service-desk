@@ -54,7 +54,7 @@ export function SubscriptionsView({ rows, admin, selfId, requests, people }: { r
               <div className="row"><button type="button" className="btn btn-bad btn-small" disabled={busy} onClick={() => decide(s, "decline")}>{t("subs.confirmDecline")}</button><button type="button" className="btn btn-small" onClick={() => setDeclining(null)}>{t("subs.cancel")}</button></div></div>}
             <Msg id={s.id} /></td>
         </tr>; })}</tbody>
-      </table></div> : <p className="card-pad soft">{t("subs.none")}</p>}
+      </table></div> : <p className="card-pad soft">{t(admin ? "subs.noneAdmin" : "subs.none")}</p>}
     </section>
 
     {admin && <form className="card card-pad stack" aria-labelledby="add-sub-h" onSubmit={record}>

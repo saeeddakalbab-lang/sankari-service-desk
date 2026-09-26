@@ -103,8 +103,8 @@ export async function useLink(token: string, user: User, reasonInput: unknown, i
   });
   if ("refused" in result) return refuse(user, result.row, result.refused as Exclude<LinkState, "ok">, ipHash);
   const { saved, action } = result;
-  if (action === "ticket.start") await queueMail(`email-start-${saved.version}`, saved, saved.requester_email, "Work has started", `${user.name} has started working on your ticket.`);
-  else await queueMail(`email-reject-${saved.version}`, saved, saved.requester_email, "Ticket closed", `${user.name} closed your ticket without action. Reason: ${reason}`);
+  if (action === "ticket.start") await queueMail(`email-start-${saved.version}`, saved, saved.requester_email, { k: "started", p: { by: user.name } });
+  else await queueMail(`email-reject-${saved.version}`, saved, saved.requester_email, { k: "closedByIt", p: { by: user.name, reason: String(reason ?? "") } });
   return { status: saved.status, requestId: saved.id, action };
 }
 

@@ -41,17 +41,17 @@ export async function createRequest(input:any,user:User,ipHash:string){
   });
   const {saved,chain}=result;
   if(chain){
-    await queueMail("submitted-requester",saved,user.email,"Request received",`Your request was received and is waiting for approval from ${chain[0].approverName}.`);
-    if(rules.notifications.emailApprover)await queueMail("approval-needed-1",saved,chain[0].approverEmail,"Approval needed",`${user.name} submitted a request that needs your decision.`);
+    await queueMail("submitted-requester",saved,user.email,{k:"receivedApproval",p:{approver:chain[0].approverName}});
+    if(rules.notifications.emailApprover)await queueMail("approval-needed-1",saved,chain[0].approverEmail,{k:"approvalNeeded",p:{requester:user.name}});
     return saved;
   }
-  await queueMail("submitted-requester",saved,user.email,"Request received","Your request was received and is now visible in the portal.");
+  await queueMail("submitted-requester",saved,user.email,{k:"received"});
   if(saved.type==="helpdesk_ticket"&&!rules.notifications.emailAdminOnTicket)return saved;
   const admins=await query<{id:string;email:string}>(`SELECT id,email FROM users WHERE roles&&ARRAY['admin','agent']::text[] AND disabled_at IS NULL`);
   const ref=refFor(saved.type,saved.id,String(saved.created_at));
   for(const a of admins.rows){
     if(saved.type==="helpdesk_ticket"&&a.id!==user.id)await queueTicketAlert(saved,a.email,ref,await issueTicketLinks(null,saved.id,a.id));
-    else if(saved.type!=="helpdesk_ticket")await queueMail("submitted-team",saved,a.email,"New request",`${user.name} submitted a new request.`);
+    else if(saved.type!=="helpdesk_ticket")await queueMail("submitted-team",saved,a.email,{k:"newRequest",p:{requester:user.name}});
   }
   return saved;
 }
@@ -70,14 +70,14 @@ export async function transitionRequest(id:string,input:{status:string;assigneeI
     const r=await c.query<RequestRecord>(`UPDATE requests SET status=$2,assignee_id=$3,details=details||$4::jsonb,assigned_at=CASE WHEN $3::uuid IS NOT NULL AND assigned_at IS NULL THEN now() ELSE assigned_at END,resolved_at=$5,closed_at=CASE WHEN $2='reopened' THEN NULL WHEN $2='closed' THEN coalesce(closed_at,now()) ELSE closed_at END,reopened_at=CASE WHEN $2='reopened' THEN now() ELSE reopened_at END,version=version+1 WHERE id=$1 AND version=$6 RETURNING *`,[id,input.status,assigned,JSON.stringify(input.details||{}),resolved,input.version]);
     if(!r.rowCount)throw new Error("Version conflict: reload the request");await audit(c,user.id,id,"request.transition",old,r.rows[0],ipHash);return {record:r.rows[0],assignedNow:!!assigned&&assigned!==old.assignee_id,resolvedNow:!!r.rows[0].resolved_at&&!old.resolved_at};});
   const saved=transition.record;
-  if(transition.assignedNow&&saved.assignee_id){const a=await query<{email:string}>(`SELECT email FROM users WHERE id=$1`,[saved.assignee_id]);if(a.rows[0])await queueMail(`assigned-${saved.version}`,saved,a.rows[0].email,"Request assigned",`A request has been assigned to you.`);}
-  if(transition.resolvedNow)await queueMail(`resolved-${saved.version}`,saved,saved.requester_email,"Request updated",`Your request is now ${saved.status}.`);return saved;
+  if(transition.assignedNow&&saved.assignee_id){const a=await query<{email:string}>(`SELECT email FROM users WHERE id=$1`,[saved.assignee_id]);if(a.rows[0])await queueMail(`assigned-${saved.version}`,saved,a.rows[0].email,{k:"assigned"});}
+  if(transition.resolvedNow)await queueMail(`resolved-${saved.version}`,saved,saved.requester_email,{k:"resolved",p:{status:saved.status}});return saved;
 }
 export async function addComment(id:string,body:string,internal:boolean,version:number,user:User,ipHash:string){
   const request=await getRequest(id,user);if(!request)throw new Error("Request not found");if(internal&&!canManage(user))throw new Error("Forbidden");void version;
   // A comment adds to the thread and never conflicts with a status change, so it does not require the caller's version; it still bumps it.
   const result=await transaction(async c=>{const r=await c.query(`INSERT INTO comments(request_id,author_id,author_name,body,internal) VALUES($1,$2,$3,$4,$5) RETURNING *`,[id,user.id,user.name,body,internal]);await c.query(`UPDATE requests SET version=version+1 WHERE id=$1`,[id]);await c.query(`INSERT INTO audit_log(actor_id,request_id,action,after_data,ip_hash) VALUES($1,$2,'comment.created',$3,$4)`,[user.id,id,JSON.stringify({id:r.rows[0].id,internal}),ipHash]);return r.rows[0];});
-  if(!internal){const recipient=canManage(user)?request.requester_email:(await query<{email:string}>(`SELECT email FROM users WHERE id=$1`,[request.assignee_id])).rows[0]?.email; if(recipient)await queueMail(`comment-${result.id}`,request,recipient,"New comment",`${user.name} added a comment.`);}return result;
+  if(!internal){const recipient=canManage(user)?request.requester_email:(await query<{email:string}>(`SELECT email FROM users WHERE id=$1`,[request.assignee_id])).rows[0]?.email; if(recipient)await queueMail(`comment-${result.id}`,request,recipient,{k:"comment",p:{author:user.name}},{comment:body});}return result;
 }
 export async function listComments(id:string,user:User){const request=await getRequest(id,user);if(!request)return null;const r=await query(`SELECT * FROM comments WHERE request_id=$1 ${canManage(user)?"":"AND internal=false"} ORDER BY created_at`,[id]);return r.rows;}
 async function audit(c:PoolClient,actor:string,request:string,action:string,before:any,after:any,ip:string){await c.query(`INSERT INTO audit_log(actor_id,request_id,action,before_data,after_data,ip_hash) VALUES($1,$2,$3,$4,$5,$6)`,[actor,request,action,JSON.stringify(before),JSON.stringify(after),ip]);}

@@ -102,15 +102,15 @@ export async function decide(requestId:string,decision:"approve"|"reject",commen
   });
   const {request,step,next}=result;
   if(step.status==="rejected"){
-    await queueMail(`approval-rejected-${step.id}`,request,request.requester_email,"Request rejected",`${user.name} rejected your request. Reason: ${step.comment}`);
+    await queueMail(`approval-rejected-${step.id}`,request,request.requester_email,{k:"rejected",p:{by:user.name,reason:String(step.comment??"")}});
   }else if(next){
     const nextEmail=(await query<{email:string}>(`SELECT email FROM users WHERE id=$1`,[next.approver_user_id])).rows[0]?.email;
-    await queueMail(`approval-approved-${step.id}`,request,request.requester_email,"Approval progressed",`${user.name} approved your request. It is now with ${next.approver_name}.`);
-    if(nextEmail&&(await getRules()).notifications.emailApprover)await queueMail(`approval-needed-${next.id}`,request,nextEmail,"Approval needed",`${request.requester_name}'s request was approved by ${user.name} and now needs your decision.`);
+    await queueMail(`approval-approved-${step.id}`,request,request.requester_email,{k:"progressed",p:{by:user.name,next:next.approver_name}});
+    if(nextEmail&&(await getRules()).notifications.emailApprover)await queueMail(`approval-needed-${next.id}`,request,nextEmail,{k:"approvalNeededNext",p:{requester:request.requester_name,by:user.name}});
   }else{
-    await queueMail(`approval-complete-${step.id}`,request,request.requester_email,"Request approved",`Every approver has approved your request. It is now with the fulfilment team.`);
+    await queueMail(`approval-complete-${step.id}`,request,request.requester_email,{k:"approvedAll"});
     const team=await query<{email:string}>(`SELECT email FROM users WHERE roles&&ARRAY['admin','agent']::text[] AND disabled_at IS NULL`);
-    for(const a of team.rows)await queueMail(`approval-fulfil-${step.id}`,request,a.email,"Approved request ready for fulfilment",`${request.requester_name}'s request passed the approval line.`);
+    for(const a of team.rows)await queueMail(`approval-fulfil-${step.id}`,request,a.email,{k:"fulfil",p:{requester:request.requester_name}});
   }
   return {request,step};
 }
@@ -156,13 +156,13 @@ export async function skipStep(requestId:string,reason:string,user:User,ipHash:s
     return {request:after,step:updated.rows[0],next};
   });
   const {request,step,next}=result;
-  await queueMail(`approval-skipped-${step.id}`,request,request.requester_email,"Approver skipped",`${user.name} skipped ${step.approver_name}, who had not answered. Reason: ${step.skip_reason}`);
+  await queueMail(`approval-skipped-${step.id}`,request,request.requester_email,{k:"skipped",p:{by:user.name,skipped:step.approver_name,reason:String(step.skip_reason??"")}});
   if(next){
     const nextEmail=(await query<{email:string}>(`SELECT email FROM users WHERE id=$1`,[next.approver_user_id])).rows[0]?.email;
-    if(nextEmail&&rules.notifications.emailApprover)await queueMail(`approval-needed-${next.id}`,request,nextEmail,"Approval needed",`${request.requester_name}'s request reached you after ${step.approver_name} was skipped. Reason: ${step.skip_reason}`);
+    if(nextEmail&&rules.notifications.emailApprover)await queueMail(`approval-needed-${next.id}`,request,nextEmail,{k:"approvalNeededSkip",p:{requester:request.requester_name,skipped:step.approver_name,reason:String(step.skip_reason??"")}});
   }else{
     const team=await query<{email:string}>(`SELECT email FROM users WHERE roles&&ARRAY['admin','agent']::text[] AND disabled_at IS NULL`);
-    for(const a of team.rows)await queueMail(`approval-fulfil-${step.id}`,request,a.email,"Approved request ready for fulfilment",`${request.requester_name}'s request passed the approval line.`);
+    for(const a of team.rows)await queueMail(`approval-fulfil-${step.id}`,request,a.email,{k:"fulfil",p:{requester:request.requester_name}});
   }
   return {request,step};
 }

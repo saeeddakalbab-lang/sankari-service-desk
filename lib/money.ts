@@ -19,3 +19,7 @@ export function formatMoney(cents:bigint|number|string,currency:string){
 }
 // "360.00" -> 36000n; refuses more than two decimals rather than rounding someone's money.
 export function parseAmountToCents(text:string):bigint|null{const m=/^\s*(\d{1,12})(?:\.(\d{1,2}))?\s*$/.exec(text.replace(/,/g,""));return m?BigInt(m[1])*100n+BigInt((m[2]||"").padEnd(2,"0")):null;}
+// Any currency -> AED at the rate the person entered ("1 CHF = 4.62 AED"); AED passes through as is.
+export const CURRENCIES=["AED","USD","EUR","GBP","CHF","TRY","SAR","QAR","KWD","EGP","SYP"] as const;
+export const isRate=(s:string)=>/^\d{1,6}(\.\d{1,6})?$/.test(s)&&Number(s)>0;
+export function toAedCents(cents:bigint,currency:string,rate:string):bigint{return currency==="AED"?cents:usdToAedCents(cents,rate);}

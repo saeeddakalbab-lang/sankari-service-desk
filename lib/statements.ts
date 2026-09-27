@@ -55,7 +55,7 @@ export async function buildStatement(month: string): Promise<Statement> {
       (SELECT coalesce(sum(amount_aed_cents),0)::text FROM statement_credits WHERE occurred_on >= $1::date AND occurred_on < $2::date) credits`, [periodStart(acc.openingMonth, cd), from])).rows[0];
   const opening = BigInt(acc.openingBalanceAedCents) + BigInt(before.charges) - BigInt(before.credits);
   const bills = (await query<{ billed_on: string; id: string; tool: string; beneficiary: string; company_name: string; amount_cents: string; currency: string; amount_aed_cents: string; approved_by: string | null; request_id: string | null; locked: boolean }>(
-    `SELECT to_char(b.billed_on,'YYYY-MM-DD') billed_on,b.id,b.tool,coalesce(nullif(b.beneficiary,''),s.beneficiary,'') beneficiary,b.company_name,b.amount_cents::text,b.currency,b.amount_aed_cents::text,u.name approved_by,b.request_id,b.locked_at IS NOT NULL locked
+    `SELECT to_char(b.billed_on,'YYYY-MM-DD') billed_on,b.id,b.tool,coalesce(nullif(b.beneficiary,''),s.beneficiary,'') beneficiary,b.company_name,b.amount_cents::text,b.currency,b.amount_aed_cents::text,coalesce(u.name,CASE WHEN b.kind='phone' THEN 'Phone: '||b.phone_approved_by END) approved_by,b.request_id,b.locked_at IS NOT NULL locked
        FROM subscription_bills b JOIN subscriptions s ON s.id=b.subscription_id LEFT JOIN users u ON u.id=b.approved_by_user_id
       WHERE b.billed_on >= $1::date AND b.billed_on < $2::date ORDER BY b.billed_on, b.created_at`, [from, to])).rows;
   const credits = (await query<{ occurred_on: string; id: string; kind: "payment" | "refund"; amount_aed_cents: string; description: string; beneficiary: string; company_name: string; locked: boolean }>(

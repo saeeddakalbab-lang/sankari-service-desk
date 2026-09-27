@@ -4,7 +4,7 @@ import { query, transaction } from "./db";
 import { AppError, forbidden } from "./errors";
 import { button, emailShell, para } from "./email-layout";
 import { refFor } from "./format";
-import { usdToAedCents } from "./money";
+import { isRate, toAedCents, usdToAedCents } from "./money";
 import { getRules } from "./rules";
 import { getUsdToAedRate } from "./settings";
 import type { User } from "./types";
@@ -28,14 +28,14 @@ const money = (cents: string | bigint, cur: string) => { const c = BigInt(cents)
 
 export type SubscriptionRow = {
   id: string; name: string; provider: string; company_name: string; amount_cents: string; currency: string; billing_frequency: string; renewal_date: string | null;
-  card_last4: string; beneficiary: string; status: string; cancel_at: string | null; renewal_flagged_at: string | null; owner_user_id: string | null; owner_name: string | null; request_id: string | null;
+  card_last4: string; beneficiary: string; aed_rate: string | null; status: string; cancel_at: string | null; renewal_flagged_at: string | null; owner_user_id: string | null; owner_name: string | null; request_id: string | null;
   request_ref: string | null; open_renewal_id: string | null; open_renewal_date: string | null; open_flagged: boolean; bills: number;
 };
-const subSelect = `SELECT s.id,s.name,s.provider,s.company_name,s.amount_cents::text,s.currency,s.billing_frequency::text,to_char(s.renewal_date,'YYYY-MM-DD') renewal_date,s.card_last4,s.beneficiary,s.status::text,
+const subSelect = `SELECT s.id,s.name,s.provider,s.company_name,s.amount_cents::text,s.currency,s.billing_frequency::text,to_char(s.renewal_date,'YYYY-MM-DD') renewal_date,s.card_last4,s.beneficiary,s.aed_rate::text,s.status::text,
   to_char(s.cancel_at,'YYYY-MM-DD') cancel_at,s.renewal_flagged_at,s.owner_user_id,o.name owner_name,s.request_id,rq.type rq_type,rq.created_at rq_created,
   rn.id open_renewal_id,to_char(rn.renewal_date,'YYYY-MM-DD') open_renewal_date,(rn.flagged_at IS NOT NULL) open_flagged,(SELECT count(*)::int FROM subscription_bills b WHERE b.subscription_id=s.id) bills
   FROM subscriptions s LEFT JOIN users o ON o.id=s.owner_user_id LEFT JOIN requests rq ON rq.id=s.request_id
-  LEFT JOIN LATERAL (SELECT * FROM subscription_renewals r WHERE r.subscription_id=s.id AND r.decision IS NULL ORDER BY r.renewal_date LIMIT 1) rn ON true`;
+  LEFT JOIN LATERAL (SELECT * FROM subscription_renewals r WHERE r.subscription_id=s.id AND r.decision IS NULL AND r.renewal_date>=coalesce(s.renewal_date,r.renewal_date) ORDER BY r.renewal_date LIMIT 1) rn ON true`;
 const shape = (r: SubscriptionRow & { rq_type?: string; rq_created?: string }) => ({ ...r, request_ref: r.request_id && r.rq_type ? refFor(r.rq_type, r.request_id, String(r.rq_created)) : null, rq_type: undefined, rq_created: undefined });
 
 export async function listSubscriptions(user: User) {
@@ -59,11 +59,28 @@ const rateFor = async (c: PoolClient, requestId: string | null) => {
 };
 const aed = (cents: bigint, currency: string, rate: string) => currency === "AED" ? cents : usdToAedCents(cents, rate);
 
+// What was actually charged: the amount after tax, in the currency of the invoice, and the rate to AED
+// the person entered (1 unit = rate AED). AED needs no rate. The rate is frozen on the bill.
+const costSchema = z.object({
+  amount: z.string().trim().regex(/^\d{1,12}(\.\d{1,2})?$/, "Amount: digits with up to 2 decimals"),
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/, "Currency: a 3-letter code such as AED, USD, EUR"),
+  aedRate: z.string().trim().default(""),
+});
+type Cost = z.infer<typeof costSchema>;
+function readCost(c: Cost) {
+  const [w, f = ""] = c.amount.split("."), cents = BigInt(w) * 100n + BigInt(f.padEnd(2, "0"));
+  if (cents <= 0n) throw new AppError("The actual cost must be more than zero");
+  if (c.currency === "AED") return { cents, currency: "AED", rate: "1", aedCents: cents };
+  if (!isRate(c.aedRate)) throw new AppError(`Enter the rate: how many AED is 1 ${c.currency}`);
+  return { cents, currency: c.currency, rate: c.aedRate, aedCents: toAedCents(cents, c.currency, c.aedRate) };
+}
+
 export const createSchema = z.object({
   requestId: z.string().uuid(), cycle: z.enum(["monthly", "quarterly", "annual", "one_off"]),
   renewalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), ownerUserId: z.string().uuid(),
   cardLast4: z.string().trim().regex(/^(\d{4})?$/, "Card: enter the last 4 digits only").default(""), provider: z.string().trim().max(120).default(""),
   beneficiary: z.string().trim().max(160).default(""),
+  actual: costSchema,
 });
 
 // Admin records the subscription an approved request paid for, and its first bill.
@@ -76,17 +93,18 @@ export async function createFromRequest(input: z.infer<typeof createSchema>, use
     if (["awaiting_approval", "rejected", "cancelled"].includes(rq.status)) throw new AppError("That request has not been approved", 409);
     if ((await c.query(`SELECT 1 FROM subscriptions WHERE request_id=$1`, [rq.id])).rowCount) throw new AppError("That request already has a subscription", 409);
     if (!(await c.query(`SELECT 1 FROM users WHERE id=$1 AND disabled_at IS NULL`, [input.ownerUserId])).rowCount) throw new AppError("Owner not found", 404);
-    const currency = String(rq.details?.currency ?? "AED"), cents = BigInt(String(rq.details?.amountCents ?? "0")), name = String(rq.details?.service ?? rq.subject);
-    if (!["USD", "AED"].includes(currency)) throw new AppError("Only USD and AED subscriptions are supported");
+    const name = String(rq.details?.service ?? rq.subject);
+    // The request carries the quoted price; the bill carries what was actually charged, after tax.
+    const cost = readCost(input.actual);
     // The beneficiary is who the seat is for; by default the person who asked for it.
-    const rate = await rateFor(c, rq.id), beneficiary = input.beneficiary || rq.requester_name;
-    const s = (await c.query<{ id: string }>(`INSERT INTO subscriptions(name,provider,company_name,department,beneficiary,amount_cents,currency,billing_frequency,renewal_date,start_date,card_last4,owner_user_id,request_id,status,method)
-      VALUES($1,$2,$3,$11,$12,$4,$5,$6,$7,current_date,$8,$9,$10,'active',CASE WHEN $8<>'' THEN 'corporate_card'::payment_method END) RETURNING id`,
-      [name, input.provider, rq.company, cents.toString(), currency, input.cycle, input.cycle === "one_off" ? null : input.renewalDate, input.cardLast4, input.ownerUserId, rq.id, rq.department, beneficiary])).rows[0];
+    const beneficiary = input.beneficiary || rq.requester_name;
+    const s = (await c.query<{ id: string }>(`INSERT INTO subscriptions(name,provider,company_name,department,beneficiary,amount_cents,currency,aed_rate,billing_frequency,renewal_date,start_date,card_last4,owner_user_id,request_id,status,method)
+      VALUES($1,$2,$3,$11,$12,$4,$5,$13,$6,$7,current_date,$8,$9,$10,'active',CASE WHEN $8<>'' THEN 'corporate_card'::payment_method END) RETURNING id`,
+      [name, input.provider, rq.company, cost.cents.toString(), cost.currency, input.cycle, input.cycle === "one_off" ? null : input.renewalDate, input.cardLast4, input.ownerUserId, rq.id, rq.department, beneficiary, cost.currency === "AED" ? null : cost.rate])).rows[0];
     const approver = (await c.query<{ id: string }>(`SELECT approver_user_id id FROM approval_steps WHERE request_id=$1 AND status='approved' ORDER BY step_no DESC LIMIT 1`, [rq.id])).rows[0];
     const bill = (await c.query(`INSERT INTO subscription_bills(subscription_id,kind,request_id,period_start,period_end,tool,company_name,amount_cents,currency,usd_to_aed_rate,amount_aed_cents,card_last4,approved_by_user_id,created_by_user_id,beneficiary)
       VALUES($1,'initial',$2,current_date,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [s.id, rq.id, input.cycle === "one_off" ? null : input.renewalDate, name, rq.company, cents.toString(), currency, rate, aed(cents, currency, rate).toString(), input.cardLast4, approver?.id ?? null, user.id, beneficiary])).rows[0];
+      [s.id, rq.id, input.cycle === "one_off" ? null : input.renewalDate, name, rq.company, cost.cents.toString(), cost.currency, cost.rate, cost.aedCents.toString(), input.cardLast4, approver?.id ?? null, user.id, beneficiary])).rows[0];
     await c.query(`INSERT INTO audit_log(actor_id,request_id,action,after_data,ip_hash) VALUES($1,$2,'subscription.created',$3,$4),($1,$2,'bill.written',$5,$4)`,
       [user.id, rq.id, JSON.stringify({ subscriptionId: s.id, ...input }), ipHash, JSON.stringify(bill)]);
     return { id: s.id, billId: bill.id };
@@ -94,13 +112,14 @@ export async function createFromRequest(input: z.infer<typeof createSchema>, use
 }
 
 // The owner's answer to a renewal. Renew writes the bill and moves the date on; decline cancels at term end.
-export async function decideRenewal(subscriptionId: string, decision: "renew" | "decline", note: string, user: User, ipHash: string) {
+export const renewalCostSchema = costSchema;
+export async function decideRenewal(subscriptionId: string, decision: "renew" | "decline", note: string, user: User, ipHash: string, actual?: Cost) {
   const result = await transaction(async c => {
     const s = (await c.query<{ id: string; name: string; owner_user_id: string | null; amount_cents: string; currency: string; billing_frequency: string; card_last4: string; request_id: string | null; company_name: string; status: string; aed_rate: string | null; beneficiary: string }>(
       `SELECT id,name,owner_user_id,amount_cents::text,currency,billing_frequency::text,card_last4,request_id,company_name,status::text,aed_rate::text,beneficiary FROM subscriptions WHERE id=$1 FOR UPDATE`, [subscriptionId])).rows[0];
     if (!s) throw new AppError("Subscription not found", 404);
     if (s.owner_user_id !== user.id) throw new AppError("Only the subscription's owner can decide its renewal", 403);
-    const rn = (await c.query<{ id: string; renewal_date: string; owner_user_id: string | null }>(`SELECT id,to_char(renewal_date,'YYYY-MM-DD') renewal_date,owner_user_id FROM subscription_renewals WHERE subscription_id=$1 AND decision IS NULL ORDER BY renewal_date LIMIT 1 FOR UPDATE`, [s.id])).rows[0];
+    const rn = (await c.query<{ id: string; renewal_date: string; owner_user_id: string | null }>(`SELECT id,to_char(renewal_date,'YYYY-MM-DD') renewal_date,owner_user_id FROM subscription_renewals WHERE subscription_id=$1 AND decision IS NULL AND renewal_date>=coalesce((SELECT renewal_date FROM subscriptions WHERE id=$1),renewal_date) ORDER BY renewal_date LIMIT 1 FOR UPDATE`, [s.id])).rows[0];
     if (!rn) throw new AppError("There is no renewal waiting for a decision", 409);
     if (rn.owner_user_id !== user.id) await c.query(`UPDATE subscription_renewals SET owner_user_id=$2 WHERE id=$1`, [rn.id, user.id]);
     await c.query(`UPDATE subscription_renewals SET decision=$2,decided_by_user_id=$3,decided_at=now(),decision_note=$4 WHERE id=$1`, [rn.id, decision, user.id, note]);
@@ -108,13 +127,22 @@ export async function decideRenewal(subscriptionId: string, decision: "renew" | 
     if (decision === "renew") {
       const interval = CYCLE_INTERVAL[s.billing_frequency];
       if (!interval) throw new AppError("A one-off purchase does not renew", 409);
-      // A rate frozen on the subscription (imported, non-USD) wins; otherwise the request's USD rate. Never guess a EUR/CHF rate.
-      const rate = s.aed_rate ? s.aed_rate : s.currency === "USD" || s.currency === "AED" ? await rateFor(c, s.request_id) : null, cents = BigInt(s.amount_cents);
-      if (!rate) throw new AppError(`No AED rate is recorded for this ${s.currency} subscription; ask an admin to set one`, 409);
+      // The owner may enter what was actually charged this time (after tax, any currency, their rate).
+      // Otherwise: a rate frozen on the subscription wins; then the request's USD rate. Never guess a rate.
+      let cents: bigint, currency: string, rate: string | null, aedCents: bigint;
+      if (actual) { const cost = readCost(actual); ({ cents, currency, rate, aedCents } = cost); }
+      else {
+        cents = BigInt(s.amount_cents); currency = s.currency;
+        rate = s.currency === "AED" ? "1" : s.aed_rate ? s.aed_rate : s.currency === "USD" ? await rateFor(c, s.request_id) : null;
+        if (!rate) throw new AppError(`No AED rate is recorded for this ${s.currency} subscription; enter the actual cost and rate`, 409);
+        aedCents = aed(cents, currency, rate);
+      }
       bill = (await c.query(`INSERT INTO subscription_bills(subscription_id,kind,renewal_id,request_id,period_start,period_end,tool,company_name,amount_cents,currency,usd_to_aed_rate,amount_aed_cents,card_last4,approved_by_user_id,created_by_user_id,beneficiary)
         VALUES($1,'renewal',$2,$3,$4::date,($4::date+$5::interval)::date,$6,$7,$8,$9,$10,$11,$12,$13,$13,$14) RETURNING *`,
-        [s.id, rn.id, s.request_id, rn.renewal_date, interval, s.name, s.company_name, cents.toString(), s.currency, rate, aed(cents, s.currency, rate).toString(), s.card_last4, user.id, s.beneficiary])).rows[0];
-      await c.query(`UPDATE subscriptions SET renewal_date=($2::date+$3::interval)::date,status='active',renewal_flagged_at=NULL,cancel_at=NULL WHERE id=$1`, [s.id, rn.renewal_date, interval]);
+        [s.id, rn.id, s.request_id, rn.renewal_date, interval, s.name, s.company_name, cents.toString(), currency, rate, aedCents.toString(), s.card_last4, user.id, s.beneficiary])).rows[0];
+      // The next renewal starts from what was actually paid this time.
+      await c.query(`UPDATE subscriptions SET renewal_date=($2::date+$3::interval)::date,status='active',renewal_flagged_at=NULL,cancel_at=NULL,amount_cents=$4,currency=$5,aed_rate=$6 WHERE id=$1`,
+        [s.id, rn.renewal_date, interval, cents.toString(), currency, currency === "AED" ? null : rate]);
     } else {
       await c.query(`UPDATE subscriptions SET cancel_at=$2::date,renewal_flagged_at=NULL,status=CASE WHEN $2::date<=current_date THEN 'cancelled'::subscription_status ELSE 'active'::subscription_status END WHERE id=$1`, [s.id, rn.renewal_date]);
     }
@@ -126,6 +154,53 @@ export async function decideRenewal(subscriptionId: string, decision: "renew" | 
   for (const a of admins.rows) await notice(`renewal-${decision}:${subscriptionId}:${result.renewalDate}:${a.email}`, a.email, decision === "renew" ? `Renewed: ${result.name}` : `Not renewing: ${result.name}`,
     decision === "renew" ? `${user.name} renewed ${result.name}. A bill was written.` : `${user.name} declined the renewal of ${result.name}. It cancels on ${result.renewalDate}; nothing will be charged.${note ? `\nNote: ${note}` : ""}`, "/subscriptions");
   return { decision, renewalDate: result.renewalDate, billId: result.bill?.id ?? null };
+}
+
+// A subscription or renewal approved on a phone call. The admin records who approved it, when, and
+// what was actually charged. It becomes a 'phone' bill, so it appears in bill history and the
+// accounting statement like any other; the database refuses one without the approver and date.
+const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const phoneBase = { approvedBy: z.string().trim().min(2).max(160), approvedOn: date, note: z.string().trim().max(2000).default(""), billedOn: date, actual: costSchema };
+export const phoneSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("renewal"), subscriptionId: z.string().uuid(), ...phoneBase }),
+  z.object({ mode: z.literal("new"), name: z.string().trim().min(2).max(160), provider: z.string().trim().max(120).default(""), companyName: z.string().trim().min(2).max(160),
+    beneficiary: z.string().trim().max(160).default(""), cycle: z.enum(["monthly", "quarterly", "annual", "one_off"]), renewalDate: date.nullable().optional(),
+    ownerUserId: z.string().uuid(), cardLast4: z.string().trim().regex(/^(\d{4})?$/, "Card: enter the last 4 digits only").default(""), ...phoneBase }),
+]);
+export async function recordPhoneApproval(input: z.infer<typeof phoneSchema>, user: User, ipHash: string) {
+  if (!isAdmin(user)) throw forbidden();
+  const today = new Date().toISOString().slice(0, 10);
+  if (input.approvedOn > today || input.billedOn > today) throw new AppError("The call and the charge cannot be in the future");
+  const cost = readCost(input.actual);
+  return transaction(async c => {
+    let subId: string, name: string, company: string, beneficiary: string, card: string, start: string, end: string | null, requestId: string | null = null;
+    if (input.mode === "new") {
+      if (input.cycle !== "one_off" && !input.renewalDate) throw new AppError("A renewal date is required for a recurring subscription");
+      if (!(await c.query(`SELECT 1 FROM users WHERE id=$1 AND disabled_at IS NULL`, [input.ownerUserId])).rowCount) throw new AppError("Owner not found", 404);
+      name = input.name; company = input.companyName; beneficiary = input.beneficiary; card = input.cardLast4; start = input.billedOn; end = input.cycle === "one_off" ? null : input.renewalDate!;
+      subId = (await c.query<{ id: string }>(`INSERT INTO subscriptions(name,provider,company_name,beneficiary,amount_cents,currency,aed_rate,billing_frequency,renewal_date,start_date,card_last4,owner_user_id,status,method,notes)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'active',CASE WHEN $11<>'' THEN 'corporate_card'::payment_method END,$13) RETURNING id`,
+        [name, input.provider, company, beneficiary, cost.cents.toString(), cost.currency, cost.currency === "AED" ? null : cost.rate, input.cycle, end, start, card, input.ownerUserId, `Approved by phone: ${input.approvedBy}, ${input.approvedOn}`])).rows[0].id;
+    } else {
+      const s = (await c.query<{ id: string; name: string; company_name: string; beneficiary: string; card_last4: string; billing_frequency: string; renewal_date: string | null; request_id: string | null; status: string }>(
+        `SELECT id,name,company_name,beneficiary,card_last4,billing_frequency::text,to_char(renewal_date,'YYYY-MM-DD') renewal_date,request_id,status::text FROM subscriptions WHERE id=$1 FOR UPDATE`, [input.subscriptionId])).rows[0];
+      if (!s) throw new AppError("Subscription not found", 404);
+      const interval = CYCLE_INTERVAL[s.billing_frequency];
+      if (!interval) throw new AppError("A one-off purchase does not renew", 409);
+      subId = s.id; name = s.name; company = s.company_name; beneficiary = s.beneficiary; card = s.card_last4; requestId = s.request_id;
+      start = s.renewal_date ?? input.billedOn;
+      end = (await c.query<{ d: string }>(`SELECT to_char(($1::date+$2::interval)::date,'YYYY-MM-DD') d`, [start, interval])).rows[0].d;
+      // The renewal is covered: move the date on and take the price actually paid as the new price.
+      await c.query(`UPDATE subscriptions SET renewal_date=$2::date,status='active',renewal_flagged_at=NULL,cancel_at=NULL,amount_cents=$3,currency=$4,aed_rate=$5 WHERE id=$1`,
+        [s.id, end, cost.cents.toString(), cost.currency, cost.currency === "AED" ? null : cost.rate]);
+    }
+    const bill = (await c.query(`INSERT INTO subscription_bills(subscription_id,kind,request_id,billed_on,period_start,period_end,tool,company_name,amount_cents,currency,usd_to_aed_rate,amount_aed_cents,card_last4,created_by_user_id,beneficiary,phone_approved_by,phone_approved_on,approval_note)
+      VALUES($1,'phone',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+      [subId, requestId, input.billedOn, start, end, name, company, cost.cents.toString(), cost.currency, cost.rate, cost.aedCents.toString(), card, user.id, beneficiary, input.approvedBy, input.approvedOn, input.note])).rows[0];
+    await c.query(`INSERT INTO audit_log(actor_id,request_id,action,after_data,ip_hash) VALUES($1,$2,$3,$4,$5)`,
+      [user.id, requestId, input.mode === "new" ? "subscription.phone_created" : "subscription.phone_renewed", JSON.stringify({ subscriptionId: subId, approvedBy: input.approvedBy, approvedOn: input.approvedOn, note: input.note, bill }), ipHash]);
+    return { id: subId, billId: bill.id };
+  });
 }
 
 // Worker step. Idempotent: unique keys make every step safe to run every tick.
@@ -147,7 +222,7 @@ export async function runRenewals() {
   // 2. No answer by the renewal date: flag it, charge nothing, tell the owner and the admins.
   const missed = await query<{ id: string; subscription_id: string; name: string; renewal_date: string; email: string | null }>(
     `UPDATE subscription_renewals r SET flagged_at=now() FROM subscriptions s LEFT JOIN users u ON u.id=s.owner_user_id
-      WHERE s.id=r.subscription_id AND r.decision IS NULL AND r.flagged_at IS NULL AND r.renewal_date<current_date
+      WHERE s.id=r.subscription_id AND r.decision IS NULL AND r.flagged_at IS NULL AND r.renewal_date<current_date AND r.renewal_date>=coalesce(s.renewal_date,r.renewal_date)
       RETURNING r.id,r.subscription_id,s.name,to_char(r.renewal_date,'YYYY-MM-DD') renewal_date,u.email`);
   for (const m of missed.rows) {
     await query(`UPDATE subscriptions SET renewal_flagged_at=coalesce(renewal_flagged_at,now()),status='renewal_due' WHERE id=$1`, [m.subscription_id]);
@@ -169,7 +244,7 @@ export type BillRow = { id: string; billed_on: string; tool: string; beneficiary
 export async function listBills(user: User, f: z.infer<typeof billFilterSchema>) {
   if (!canSeeBills(user)) throw forbidden();
   const r = await query<BillRow & { rq_type: string | null; rq_created: string | null }>(`SELECT b.id,to_char(b.billed_on,'YYYY-MM-DD') billed_on,b.tool,coalesce(nullif(b.beneficiary,''),s.beneficiary,'') beneficiary,b.company_name,b.kind,b.amount_cents::text,b.currency,b.usd_to_aed_rate::text,b.amount_aed_cents::text,b.card_last4,
-      a.name approved_by,b.request_id,rq.type rq_type,rq.created_at rq_created FROM subscription_bills b JOIN subscriptions s ON s.id=b.subscription_id LEFT JOIN users a ON a.id=b.approved_by_user_id LEFT JOIN requests rq ON rq.id=b.request_id
+      coalesce(a.name,CASE WHEN b.kind='phone' THEN 'Phone: '||b.phone_approved_by END) approved_by,b.request_id,rq.type rq_type,rq.created_at rq_created FROM subscription_bills b JOIN subscriptions s ON s.id=b.subscription_id LEFT JOIN users a ON a.id=b.approved_by_user_id LEFT JOIN requests rq ON rq.id=b.request_id
       WHERE ($1='' OR b.company_name=$1) AND ($2::date IS NULL OR b.billed_on>=$2::date) AND ($3::date IS NULL OR b.billed_on<=$3::date) ORDER BY b.billed_on DESC, b.created_at DESC LIMIT 5000`,
     [f.company || "", f.from || null, f.to || null]);
   const rows = r.rows.map(({ rq_type, rq_created, ...b }) => ({ ...b, request_ref: b.request_id && rq_type ? refFor(rq_type, b.request_id, String(rq_created)) : null }));

@@ -402,3 +402,16 @@ Same routine: dump with `STEP=016`, then deploy.
 On **Accounting statement**, each line has **Edit** until that statement is sent; every edit is audited
 old -> new. **Record a card payment or refund** now asks for the person (from People, or typed) and
 the company, and the two breakdowns show charges, payments and the net per person and per company.
+
+# Step O: phone-approved subscriptions, actual cost after tax, any currency (migration 017)
+
+Same routine: dump with `STEP=017`, then deploy.
+
+| Migration | What it does | Rollback |
+|---|---|---|
+| `017_phone_approved_bills.sql` | Adds bill kind `phone` with `phone_approved_by`, `phone_approved_on` and `approval_note`; the guard refuses a phone bill without the approver and the date of the call (and a call in the future). No existing row changes. | `db/rollback/017_phone_approved_bills.down.sql`: refuses once any phone bill exists. |
+
+On **Subscriptions**: recording from an approved request now asks for the actual cost after tax, its
+currency and the rate to AED; **Renew** asks the same, pre-filled from last time; **Record a phone
+approval** adds a new subscription or a renewal approved on a call. All three write bills, so they
+appear in bill history and the accounting statement. The rate is frozen on each bill.

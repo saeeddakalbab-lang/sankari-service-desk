@@ -31,6 +31,16 @@ describe("request emails", () => {
   it("leaves out the due time once the request is resolved", () => {
     expect(buildRequestMail({ ...req, resolved_at: "2026-09-26T10:00:00Z" } as RequestRecord, "en", { k: "assigned" }).text).not.toContain("Due:");
   });
+  it("uses only tables Outlook can draw, with the logo embedded in the message", () => {
+    const links = { start: "https://x.test/s", reject: "https://x.test/r" };
+    for (const m of [buildRequestMail(req, "en", { k: "assigned" }), buildRequestMail(req, "ar", { k: "comment", p: { author: "x" } }, { comment: "a\nb" }), buildTicketAlert(req, "en", "HLP-1", links)]) {
+      expect(m.html).not.toMatch(/<(div|header|main|section)\b/);
+      expect(m.html).not.toMatch(/<p[^>]*>(?:(?!<\/p>).)*<table/);   // no table inside a paragraph
+      expect(m.html).toContain('src="cid:sankari-logo"');
+      expect(m.html).toContain('bgcolor="#4A443C"');
+    }
+    expect(buildRequestMail(req, "en", { k: "comment", p: { author: "x" } }, { comment: "line one\nline two" }).html).toContain("line one<br>line two");
+  });
   it("builds the new-ticket alert with Start and Reject in both languages", () => {
     const links = { start: "https://x.test/s", reject: "https://x.test/r" };
     const en = buildTicketAlert(req, "en", "HLP-2026-B857", links), ar = buildTicketAlert(req, "ar", "HLP-2026-B857", links);

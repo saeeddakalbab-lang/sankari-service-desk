@@ -20,7 +20,7 @@ const CYCLE_INTERVAL: Record<string, string | null> = { monthly: "1 month", quar
 
 async function notice(eventKey: string, recipient: string, title: string, body: string, path: string) {
   const url = new URL(path, base()).href;
-  const html = emailShell(title, `${body.split("\n").map(para).join("")}<p style="margin:18px 0 0">${button(url, "Open subscriptions")}</p>`);
+  const html = emailShell(title, `${body.split("\n").map(para).join("")}<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-top:18px">${button(url, "Open subscriptions")}</td></tr></table>`);
   await query(`INSERT INTO email_outbox(event_key,recipient,subject,html,text_body) VALUES($1,lower($2),$3,$4,$5) ON CONFLICT(event_key) DO NOTHING`,
     [eventKey, recipient, `[Sankari] ${title}`, html, `Sankari Holding\n${title}\n\n${body}\n\nOpen subscriptions: ${url}`]);
 }

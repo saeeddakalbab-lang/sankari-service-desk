@@ -1,5 +1,5 @@
 import { query } from "./db";
-import { button, emailShell, esc, para, rowsTable } from "./email-layout";
+import { box, button, emailShell, esc, para, rowsTable } from "./email-layout";
 import { fmtDateTime, refFor } from "./format";
 import { translator, type I18nKey } from "./i18n";
 import { labels, mailText, type Labels, type MailMsg } from "./mail-text";
@@ -31,12 +31,14 @@ function requestFacts(request: RequestRecord, locale: Locale, assignee: string |
   return { ref, rows, t, l };
 }
 
+// Outlook ignores white-space:pre-wrap, so line breaks become <br>.
+const lines = (s: string) => esc(s).replace(/\r?\n/g, "<br>");
+const small = (s: string) => `<p style="margin:0 0 4px;font-size:12px;color:#5E564D">${esc(s)}</p>`;
 const card = (subject: string, description: string, l: Labels) =>
-  `<div style="padding:16px 18px;background:#F7F5F1;border-radius:8px;margin:16px 0" dir="auto"><strong style="display:block;font-size:16px;margin-bottom:6px">${esc(subject)}</strong>`
-  + (description.trim() ? `<span style="display:block;font-size:12px;color:#5E564D;margin-bottom:4px">${esc(l.description)}</span><div style="white-space:pre-wrap;line-height:1.55;font-size:14px;text-align:start" dir="auto">${esc(description.length > 1200 ? description.slice(0, 1200) + "…" : description)}</div>` : "")
-  + `</div>`;
+  box(`<p dir="auto" style="margin:0 0 6px;font-size:16px;font-weight:bold;color:#2B2622">${esc(subject)}</p>`
+    + (description.trim() ? `${small(l.description)}<p dir="auto" style="margin:0;line-height:1.55;font-size:14px">${lines(description.length > 1200 ? description.slice(0, 1200) + "…" : description)}</p>` : ""));
 const quote = (label: string, text: string, rtl: boolean) =>
-  `<div style="border-${rtl ? "right" : "left"}:3px solid #B84F27;padding:8px 14px;margin:14px 0;background:#FBF8F4"><span style="display:block;font-size:12px;color:#5E564D;margin-bottom:4px">${esc(label)}</span><div style="white-space:pre-wrap;line-height:1.55" dir="auto">${esc(text)}</div></div>`;
+  box(`${small(label)}<p dir="auto" style="margin:0;line-height:1.55">${lines(text)}</p>`, { bg: "#FBF8F4", accentSide: rtl ? "right" : "left" });
 
 // Builds one request email. Pure, so tests and previews render it without a database.
 export function buildRequestMail(request: RequestRecord, locale: Locale, msg: MailMsg, extra: { comment?: string; assignee?: string | null } = {}) {
@@ -46,7 +48,7 @@ export function buildRequestMail(request: RequestRecord, locale: Locale, msg: Ma
   const { title, body } = mailText({ ...msg, p }, locale);
   const subject = `[Sankari] ${title}: ${request.subject}`;
   const text = [l.footer, title, "", body, extra.comment ? `\n${l.comment}:\n${extra.comment}` : "", "", request.subject, ...rows.map(([k, v]) => `${k}: ${v}`), "", request.description ? `${l.description}:\n${request.description}` : "", "", `${l.open}: ${url}`].join("\n").replace(/\n{3,}/g, "\n\n");
-  const html = emailShell(title, `${para(body)}${extra.comment ? quote(l.comment, extra.comment, rtl) : ""}${card(request.subject, request.description || "", l)}${rowsTable(rows, rtl)}<p style="margin:22px 0 0">${button(url, l.open)}</p>`, { lang: locale, footer: l.footer });
+  const html = emailShell(title, `${para(body)}${extra.comment ? quote(l.comment, extra.comment, rtl) : ""}${card(request.subject, request.description || "", l)}${rowsTable(rows, rtl)}<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-top:22px">${button(url, l.open)}</td></tr></table>`, { lang: locale, footer: l.footer });
   return { ref, subject, html, text };
 }
 
@@ -67,7 +69,7 @@ export function buildTicketAlert(request: RequestRecord, locale: Locale, ref: st
   const rows: [string, string][] = [[l.reference, ref], [l.requester, `${request.requester_name} <${request.requester_email}>`], [l.company, request.company], [l.category, String(d.category ?? "")], [l.priority, prio], [l.asset, String(d.assetTag ?? "") || "—"]];
   if (request.sla_due_at) rows.push([l.due, fmtDateTime(request.sla_due_at)]);
   const text = `${l.footer}\n${title}\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}\n\n${request.subject}\n${request.description}\n\n${l.start}: ${links.start}\n${l.reject}: ${links.reject}\n\n${l.links}\n${l.openTicket}: ${url}`;
-  const html = emailShell(title, `${rowsTable(rows, rtl)}${card(request.subject, request.description || "", l)}<p style="margin:22px 0 8px">${button(links.start, l.start)} &nbsp; ${button(links.reject, l.reject, "outline-bad")}</p><p style="font-size:12px;color:#5E564D;margin:0">${esc(l.links)} <a href="${esc(url)}" style="color:#B84F27">${esc(l.openTicket)}</a></p>`, { lang: locale, footer: l.footer });
+  const html = emailShell(title, `${rowsTable(rows, rtl)}${card(request.subject, request.description || "", l)}<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-top:22px">${button(links.start, l.start)}${button(links.reject, l.reject, "outline-bad")}</td></tr></table><p style="font-size:12px;color:#5E564D;margin:0">${esc(l.links)} <a href="${esc(url)}" style="color:#B84F27">${esc(l.openTicket)}</a></p>`, { lang: locale, footer: l.footer });
   return { subject, html, text };
 }
 export async function queueTicketAlert(request: RequestRecord, recipient: string, ref: string, links: { start: string; reject: string }) {

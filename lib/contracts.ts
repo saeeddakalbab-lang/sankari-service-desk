@@ -51,7 +51,7 @@ export const usd = (c: bigint | string | number) => { const v = BigInt(c); retur
 
 // One mail layout for everything a client or an admin receives about a contract.
 async function mail(eventKey: string, to: string, title: string, paragraphs: string[], rows: [string, string][] = [], link?: { href: string; label: string }) {
-  const html = emailShell(title, `${paragraphs.map(para).join("")}${rowsTable(rows)}${link ? `<p style="margin:22px 0 0">${button(link.href, link.label)}</p>` : ""}`);
+  const html = emailShell(title, `${paragraphs.map(para).join("")}${rowsTable(rows)}${link ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-top:22px">${button(link.href, link.label)}</td></tr></table>` : ""}`);
   const text = `Sankari Holding\n${title}\n\n${paragraphs.join("\n\n")}\n\n${rows.map(([k, v]) => `${k}: ${v}`).join("\n")}${link ? `\n\n${link.label}: ${link.href}` : ""}`;
   await query(`INSERT INTO email_outbox(event_key,recipient,subject,html,text_body) VALUES($1,lower($2),$3,$4,$5) ON CONFLICT(event_key) DO NOTHING`, [eventKey, to, `[Sankari] ${title}`, html, text]);
 }

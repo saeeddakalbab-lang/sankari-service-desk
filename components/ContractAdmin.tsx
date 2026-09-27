@@ -16,6 +16,7 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
   const t = useT(), router = useRouter(), c = d.contract;
   const [busy, setBusy] = useState(false), [msg, setMsg] = useState<{ area: string; ok: boolean; text: string } | null>(null);
   const [reason, setReason] = useState(""), [evidence, setEvidence] = useState(""), [start, setStart] = useState(c.requested_start_date > today ? c.requested_start_date : today), [mode, setMode] = useState<"" | "reject" | "cancel">("");
+  const [adjKind, setAdjKind] = useState<"none" | "discount" | "markup">(c.adjustment_kind ?? "none"), [adjPct, setAdjPct] = useState(c.adjustment_bps ? String(Number(c.adjustment_bps) / 100) : "");
   const [paid, setPaid] = useState<Record<string, { on: string; amount: string }>>({});
   const [staff, setStaff] = useState({ staffName: "", serviceKey: d.lines[0]?.service_key ?? "", monthlyCost: "", startedOn: c.start_date ?? today });
   const post = async (area: string, url: string, body: object) => {
@@ -49,8 +50,20 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
         <dl className="facts" style={{ gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
           <div><dt>{t("ct.subtotal")}</dt><dd dir="ltr">{usd(c.subtotal_cents)}</dd></div>
           <div><dt>{t("ct.premium")}</dt><dd dir="ltr">{usd(c.onsite_premium_cents)}</dd></div>
+          {BigInt(c.discount_cents ?? 0) > 0n && <div><dt>{t("adj.discountLine", { p: Number(c.adjustment_bps) / 100 })}</dt><dd dir="ltr">− {usd(c.discount_cents)}</dd></div>}
           <div><dt>{t("ct.total")}</dt><dd dir="ltr">{usd(c.total_cents)}</dd></div>
         </dl>
+        {c.adjustment_kind === "markup" && c.list_total_cents && <p className="soft" style={{ fontSize: 13 }}>{t("adj.markupNote", { p: Number(c.adjustment_bps) / 100, list: usd(c.list_total_cents), profit: usd(String(BigInt(c.total_cents) - BigInt(c.list_total_cents))) })}</p>}
+        {admin && (s === "submitted" || s === "under_review") && <form className="stack-s" style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }} onSubmit={e => { e.preventDefault(); post("adj", `/api/admin/contracts/${c.id}`, { action: "adjust", kind: adjKind, percent: adjPct }); }}>
+          <h3 style={{ fontSize: 15 }}>{t("adj.title")}</h3>
+          <div className="grid-3" style={{ alignItems: "end" }}>
+            <div className="field"><label className="label" htmlFor="adj-kind">{t("adj.kind")}</label><select className="select" id="adj-kind" value={adjKind} onChange={e => setAdjKind(e.target.value as typeof adjKind)}><option value="none">{t("adj.none")}</option><option value="discount">{t("adj.discount")}</option><option value="markup">{t("adj.markup")}</option></select></div>
+            <div className="field"><label className="label" htmlFor="adj-pct">{t("adj.percent")}</label><input className="input mono" id="adj-pct" dir="ltr" inputMode="decimal" disabled={adjKind === "none"} value={adjKind === "none" ? "" : adjPct} onChange={e => setAdjPct(e.target.value)} aria-describedby="adj-hint" /></div>
+            <div><button type="submit" className="btn btn-primary" disabled={busy}>{t("adj.apply")}</button></div>
+          </div>
+          <span id="adj-hint" className="hint">{t(adjKind === "markup" ? "adj.hintMarkup" : adjKind === "discount" ? "adj.hintDiscount" : "adj.hintNone")}</span>
+          <Msg area="adj" />
+        </form>}
       </section>
       <section className="card card-pad stack-s" aria-labelledby="ct-client">
         <h2 id="ct-client" style={{ fontSize: 17 }}>{t("ct.client")}</h2>

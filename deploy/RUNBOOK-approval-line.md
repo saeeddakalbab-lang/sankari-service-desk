@@ -377,3 +377,16 @@ Same routine: dump with `STEP=014`, then deploy. The app applies it on start.
 After deploy, **Contracts → Price list** shows each service's base salary and what a full month, two
 weeks and one week cost: (base salary + flat cost) × multiplier. Admins can change the base salaries,
 the flat cost and the multiplier; each save is audited, and saved contracts keep their own figures.
+
+# Step M: discount or profit on a contract (migration 015)
+
+Same routine: dump with `STEP=015`, then deploy. The app applies it on start.
+
+| Migration | What it does | Rollback |
+|---|---|---|
+| `015_contract_adjustment.sql` | Adds `adjustment_kind` (discount or markup), `adjustment_bps`, `discount_cents` and `list_total_cents` to `contracts`, and extends the contract guard so they freeze with the price once the contract is approved. No existing row changes. | `db/rollback/015_contract_adjustment.down.sql`: refuses once any contract carries an adjustment; restores the 013 guard. |
+
+On a contract that is submitted or under review, **Discount or profit** sets a percentage:
+a discount is printed on the contract as its own line and lowers the total; a profit raises each
+service's monthly price and never appears on anything the client sees. The price list moved to
+**Admin settings → Price list**; the Contracts page shows it read-only.

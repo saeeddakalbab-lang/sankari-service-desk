@@ -11,7 +11,7 @@ const half = (n: bigint, d: bigint) => (n * 2n + d) / (2n * d);
 
 // The contract price list: base salary per service, and what a full month, two weeks and one week
 // cost with (base salary + flat cost) x multiplier. Admins edit it; the accountant reads it.
-export function PriceList({ pricing, canEdit }: { pricing: PricingConfig; canEdit: boolean }) {
+export function PriceList({ pricing, canEdit, editHref }: { pricing: PricingConfig; canEdit: boolean; editHref?: string }) {
   const t = useT(), locale = useLocale();
   const [cfg, setCfg] = useState(withWorkPattern(pricing));
   const [base, setBase] = useState(() => Object.fromEntries(Object.entries(pricing.services).map(([k, s]) => [k, toText(s.baseSalaryCents)])));
@@ -34,7 +34,7 @@ export function PriceList({ pricing, canEdit }: { pricing: PricingConfig; canEdi
     } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) }); } finally { setBusy(false); }
   };
   return <section className="card" aria-labelledby="pl-h">
-    <div className="card-head"><div className="stack-s" style={{ gap: 2 }}><h2 id="pl-h">{t("pl.title")}</h2><span className="soft" style={{ fontSize: 13 }}>{t("pl.formula", { flat: usd(flatC ?? 0n), m: String(multN ?? "?") })}</span></div></div>
+    <div className="card-head"><div className="stack-s" style={{ gap: 2 }}><h2 id="pl-h">{t("pl.title")}</h2><span className="soft" style={{ fontSize: 13 }}>{t("pl.formula", { flat: usd(flatC ?? 0n), m: String(multN ?? "?") })}</span></div>{editHref && <a className="btn btn-small" href={editHref}>{t("pl.edit")}</a>}</div>
     <div className="table-wrap"><table className="table">
       <thead><tr><th scope="col">{t("cr.service")}</th><th scope="col">{t("pl.base")}</th><th scope="col" className="num">{t("pl.full", { w: cfg.weeksPerMonth })}</th><th scope="col" className="num">{t("pl.two")}</th><th scope="col" className="num">{t("pl.one")}</th></tr></thead>
       <tbody>{rows.map(r => <tr key={r.k}>

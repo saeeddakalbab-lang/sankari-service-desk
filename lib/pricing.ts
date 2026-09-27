@@ -48,6 +48,26 @@ export function quote(config: PricingConfig, input: QuoteInput) {
     monthlyCents: lines.reduce((s, l) => s + l.monthlyPriceCents, 0n) };
 }
 
+// A discount or profit set at review. Always worked out from the list prices, so changing it twice
+// never compounds:
+//   markup (profit): each monthly price x (1 + p), half-up; the client only sees these prices
+//   discount:        (services + onsite premium) x p, half-up, shown to the client as its own line
+export type Adjustment = { kind: "discount" | "markup"; bps: number } | null;
+export const MAX_DISCOUNT_BPS = 9000, MAX_MARKUP_BPS = 20000;
+export function adjustContract(listMonthlyCents: bigint[], durationMonths: number, onsitePremiumBps: number, adj: Adjustment) {
+  if (adj && (adj.bps < 1 || adj.bps > (adj.kind === "discount" ? MAX_DISCOUNT_BPS : MAX_MARKUP_BPS))) throw new Error(adj.kind === "discount" ? "A discount is between 0.01% and 90%" : "A profit is between 0.01% and 200%");
+  const months = BigInt(durationMonths), up = adj?.kind === "markup" ? BigInt(10000 + adj.bps) : 10000n;
+  const monthly = listMonthlyCents.map(m => divHalfUp(m * up, 10000n));
+  const lineTotals = monthly.map(m => m * months);
+  const subtotal = lineTotals.reduce((s, x) => s + x, 0n);
+  const premium = onsitePremiumBps ? divHalfUp(subtotal * BigInt(onsitePremiumBps), 10000n) : 0n;
+  const discount = adj?.kind === "discount" ? divHalfUp((subtotal + premium) * BigInt(adj.bps), 10000n) : 0n;
+  const listTotal = listMonthlyCents.reduce((s, m) => s + m * months, 0n), listPremium = onsitePremiumBps ? divHalfUp(listTotal * BigInt(onsitePremiumBps), 10000n) : 0n;
+  return { monthly, lineTotals, subtotal, premium, discount, total: subtotal + premium - discount, listTotal: listTotal + listPremium };
+}
+// "10" or "7.5" percent -> basis points; null when it isn't a plain percentage.
+export const percentToBps = (s: string) => { const m = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(s.trim()); return m ? Number(m[1]) * 100 + Number((m[2] ?? "").padEnd(2, "0")) : null; };
+
 // "2 weeks/month · 6 days/week · 96 h"; lines saved before weeks existed show their hours only.
 export const workload = (weeks: number | null | undefined, days: number | null | undefined, hours: number) =>
   weeks && days ? `${weeks} wk/month · ${days} days/wk · ${hours} h` : `${hours} h/month`;

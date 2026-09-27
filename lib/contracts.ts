@@ -4,7 +4,7 @@ import { query, transaction } from "./db";
 import { AppError } from "./errors";
 import { button, emailShell, para, rowsTable } from "./email-layout";
 import { usdToAedCents } from "./money";
-import { DEFAULT_PRICING, midpointMonths, quote, quoteInputSchema, withWorkPattern, workload, type PricingConfig } from "./pricing";
+import { adjustContract, DEFAULT_PRICING, midpointMonths, percentToBps, quote, quoteInputSchema, withWorkPattern, workload, type PricingConfig } from "./pricing";
 import { getSetting, getUsdToAedRate } from "./settings";
 import type { User } from "./types";
 
@@ -110,6 +110,7 @@ export async function getContract(id: string) {
 // ---------- Admin actions ----------
 export const actionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("review") }),
+  z.object({ action: z.literal("adjust"), kind: z.enum(["none", "discount", "markup"]), percent: z.string().trim().max(8).default("") }),
   z.object({ action: z.literal("approve") }),
   z.object({ action: z.literal("reject"), reason: z.string().trim().min(3).max(2000) }),
   z.object({ action: z.literal("signed"), evidence: z.string().trim().min(3).max(2000) }),
@@ -125,7 +126,21 @@ export async function contractAction(id: string, input: z.infer<typeof actionSch
     if (!ct) throw new AppError("Contract not found", 404);
     const need = (...s: string[]) => { if (!s.includes(ct.status)) throw new AppError(`This contract is ${ct.status.replace("_", " ")}; that step is not available`, 409); };
     let emailTo: "client" | null = null; const out: Record<string, unknown> = { contractId: id, reference: ct.reference, action: input.action };
-    if (input.action === "review") { need("submitted"); await c.query(`UPDATE contracts SET status='under_review',reviewed_by=$2,reviewed_at=now() WHERE id=$1`, [id, user.id]); }
+    if (input.action === "adjust") {
+      need("submitted", "under_review");
+      const bps = input.kind === "none" ? 0 : percentToBps(input.percent);
+      if (input.kind !== "none" && !bps) throw new AppError("Enter a percentage such as 10 or 7.5");
+      const lines = (await c.query<{ id: string; monthly_full_time_cents: string; hours_per_month: number; standard_hours: number }>(`SELECT id,monthly_full_time_cents::text,hours_per_month,standard_hours FROM contract_line_items WHERE contract_id=$1 ORDER BY created_at`, [id])).rows;
+      const list = lines.map(l => { const n = BigInt(l.monthly_full_time_cents) * BigInt(l.hours_per_month), d = BigInt(l.standard_hours); return (n * 2n + d) / (2n * d); });
+      const premiumBps = ct.support_type === "onsite" ? Number(ct.pricing_snapshot?.config?.onsitePremiumBps ?? 0) : 0;
+      const adj = input.kind === "none" ? null : { kind: input.kind, bps: bps! };
+      const p = (() => { try { return adjustContract(list, ct.duration_months, premiumBps, adj); } catch (e) { throw new AppError((e as Error).message); } })();
+      for (const [i, l] of lines.entries()) await c.query(`UPDATE contract_line_items SET monthly_price_cents=$2,line_total_cents=$3 WHERE id=$1`, [l.id, p.monthly[i].toString(), p.lineTotals[i].toString()]);
+      await c.query(`UPDATE contracts SET subtotal_cents=$2,onsite_premium_cents=$3,discount_cents=$4,total_cents=$5,adjustment_kind=$6,adjustment_bps=$7,list_total_cents=$8 WHERE id=$1`,
+        [id, p.subtotal.toString(), p.premium.toString(), p.discount.toString(), p.total.toString(), adj?.kind ?? null, adj?.bps ?? 0, adj ? p.listTotal.toString() : null]);
+      Object.assign(out, { kind: input.kind, bps: adj?.bps ?? 0, beforeCents: String(ct.total_cents), afterCents: p.total.toString(), listTotalCents: p.listTotal.toString() });
+    }
+    else if (input.action === "review") { need("submitted"); await c.query(`UPDATE contracts SET status='under_review',reviewed_by=$2,reviewed_at=now() WHERE id=$1`, [id, user.id]); }
     else if (input.action === "approve") {
       need("submitted", "under_review");
       await c.query(`UPDATE contracts SET status='approved',reviewed_by=$2,reviewed_at=now() WHERE id=$1`, [id, user.id]);
@@ -168,13 +183,15 @@ export async function contractAction(id: string, input: z.infer<typeof actionSch
         `To accept, reply to this email confirming the contract, or send back a signed copy, and pay the signing invoice. We start on the agreed date once both are received.`,
         `للموافقة، يرجى الرد على هذا البريد بتأكيد الاتفاقية أو إرسال نسخة موقعة، وسداد فاتورة التوقيع. نبدأ في التاريخ المتفق عليه بعد استلامهما.`],
         [["Contract", ct.reference], ["Company", ct.company_name], ...lines.map(l => [l.service_label, `${workload(l.weeks_per_month, l.days_per_week, l.hours_per_month)} · ${usd(l.monthly_price_cents)} / month`] as [string, string]),
-         ["Support", ct.support_type === "onsite" ? "Onsite" : "Remote"], ["Duration", `${ct.duration_months} months from ${ct.rsd}`], ["Contract total", usd(ct.total_cents)],
+         ["Support", ct.support_type === "onsite" ? "Onsite" : "Remote"], ["Duration", `${ct.duration_months} months from ${ct.rsd}`],
+         ...(BigInt(ct.discount_cents ?? 0) > 0n ? [["Subtotal", usd(BigInt(ct.subtotal_cents) + BigInt(ct.onsite_premium_cents))], [`Discount ${Number(ct.adjustment_bps) / 100}%`, `− ${usd(ct.discount_cents)}`]] as [string, string][] : []),
+         ["Contract total", usd(ct.total_cents)],
          ["Invoice", inv.reference], ["Amount due now (50%)", usd(inv.amount_cents)], ["Payment terms", `${terms.paymentTermsDays} days`]]);
     } else if (input.action === "reject") await mail(`contract-rejected:${id}`, ct.contact_email, `About your contract request ${ct.reference}`, [salutation, `We are unable to proceed with this request.`, `Reason: ${r.out.reason}`]);
     else if (input.action === "activate") await mail(`contract-active:${id}`, ct.contact_email, `Your contract ${ct.reference} starts on ${r.out.startDate}`, [salutation, `Thank you for your payment. Work starts on ${r.out.startDate}. The 25% midpoint invoice is issued after ${r.out.midpointMonth} month(s), and the final 25% at the end of the contract.`]);
     else if (input.action === "cancel") await mail(`contract-cancelled:${id}`, ct.contact_email, `Contract ${ct.reference} cancelled`, [salutation, `This contract has been cancelled. Any unpaid invoices are void.`, `Reason: ${r.out.reason}`]);
   }
-  for (const a of await admins()) await mail(`contract-${input.action}:${id}:${a}`, a, `${ct.reference}: ${input.action} by ${user.name}`, [`${ct.company_name} · ${usd(ct.total_cents)}`], [], { href: detail, label: "Open the contract" });
+  if (input.action !== "adjust") for (const a of await admins()) await mail(`contract-${input.action}:${id}:${a}`, a, `${ct.reference}: ${input.action} by ${user.name}`, [`${ct.company_name} · ${usd(ct.total_cents)}`], [], { href: detail, label: "Open the contract" });
   return { id, action: input.action };
 }
 

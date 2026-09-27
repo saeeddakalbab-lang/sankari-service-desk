@@ -7,7 +7,8 @@ import { splitInstallments } from "../lib/money";
 const c = await pool.connect();
 let failures = 0;
 const ok = (label: string) => console.log(`PASS ${label}`);
-const bad = (label: string, why: string) => { failures++; console.log(`FAIL ${label}: ${why}`); };
+// On GitHub Actions each failure is also an annotation, readable on the run page without the logs.
+const bad = (label: string, why: string) => { failures++; console.log(`FAIL ${label}: ${why}`); if (process.env.GITHUB_ACTIONS) console.log(`::error title=Database guard::${`${label}: ${why}`.replace(/[\r\n]+/g, " ").slice(0, 400)}`); };
 async function refused(label: string, sql: string, values: unknown[] = [], mustNotEcho?: string) {
   await c.query("SAVEPOINT t");
   try { await c.query(sql, values); await c.query("SET CONSTRAINTS ALL IMMEDIATE"); await c.query("SET CONSTRAINTS ALL DEFERRED"); bad(label, "was accepted"); }
@@ -238,6 +239,8 @@ try {
   await refused("user as their own manager", `UPDATE users SET manager_user_id=id WHERE id=$1`, [emp]);
   await c.query(`UPDATE users SET roles=roles||'{ceo}' WHERE id=$1 AND NOT EXISTS (SELECT 1 FROM users WHERE 'ceo'=ANY(roles) AND disabled_at IS NULL)`, [ceo]);
   await refused("two active CEOs", `UPDATE users SET roles=array_append(roles,'ceo') WHERE id IN ($1,$2)`, [mgr, emp]);
+} catch (e) {
+  bad("guard script stopped", (e as Error).message);
 } finally {
   await c.query("ROLLBACK");
   c.release();

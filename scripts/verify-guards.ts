@@ -148,8 +148,21 @@ try {
   await refused("AED bill whose AED amount differs", `INSERT INTO subscription_bills(subscription_id,kind,request_id,tool,amount_cents,currency,usd_to_aed_rate,amount_aed_cents) VALUES($1,'initial',$2,'guard tool',9600,'AED',1,9601)`, [gsub, subReq]);
   const firstBill = await accepted("first bill on the approved request", ...bill("initial", "request_id", [subReq]));
   await refused("second first bill for the same subscription", ...bill("initial", "request_id", [subReq]));
-  await refused("edit a bill", `UPDATE subscription_bills SET amount_cents=1 WHERE subscription_id=$1`, [gsub]);
+  await refused("edit a bill's amount", `UPDATE subscription_bills SET amount_cents=1 WHERE subscription_id=$1`, [gsub]);
+  await refused("edit a bill's date", `UPDATE subscription_bills SET billed_on=billed_on-1 WHERE subscription_id=$1`, [gsub]);
   await refused("delete a bill", `DELETE FROM subscription_bills WHERE subscription_id=$1`, [gsub]);
+  // Until its statement is sent, a charge may change its person and company only (migration 016).
+  await accepted("correct the person and company of an unsent bill", `UPDATE subscription_bills SET beneficiary='Guard Person',company_name='Guard Co' WHERE subscription_id=$1`, [gsub]);
+  await accepted("sending the statement locks the bill", `UPDATE subscription_bills SET locked_at=now() WHERE subscription_id=$1`, [gsub]);
+  await refused("correct a bill after its statement was sent", `UPDATE subscription_bills SET beneficiary='Someone else' WHERE subscription_id=$1`, [gsub]);
+  await refused("unlock a sent bill", `UPDATE subscription_bills SET locked_at=NULL WHERE subscription_id=$1`, [gsub]);
+  // Approved on a phone call (migration 017): needs who approved it and the date of the call.
+  await refused("phone bill without who approved it", ...bill("phone", "", []));
+  await refused("phone bill without the date of the call", ...bill("phone", "phone_approved_by", ["Guard Chair"]));
+  await refused("phone bill with a blank approver", ...bill("phone", "phone_approved_by,phone_approved_on", ["  ", new Date().toISOString().slice(0, 10)]));
+  await refused("phone bill with a call in the future", ...bill("phone", "phone_approved_by,phone_approved_on", ["Guard Chair", "2999-01-01"]));
+  await accepted("phone bill with the approver and the date", ...bill("phone", "phone_approved_by,phone_approved_on,approval_note", ["Guard Chair", new Date().toISOString().slice(0, 10), "approved on a call"]));
+  await refused("unknown bill kind", ...bill("gift", "", []));
   void firstBill;
   const ren = (await c.query<{ id: string }>(`INSERT INTO subscription_renewals(subscription_id,renewal_date,owner_user_id) VALUES($1,current_date+10,$2) RETURNING id`, [gsub, emp])).rows[0].id;
   await refused("renewal bill with no decision (auto-renew)", ...bill("renewal", "renewal_id", [ren]));
@@ -169,8 +182,13 @@ try {
   await refused("payment of zero", `INSERT INTO statement_credits(occurred_on,kind,amount_aed_cents) VALUES(current_date,'payment',0)`);
   await refused("unknown credit kind", `INSERT INTO statement_credits(occurred_on,kind,amount_aed_cents) VALUES(current_date,'gift',100)`);
   await accepted("record a card payment", `INSERT INTO statement_credits(occurred_on,kind,amount_aed_cents,description) VALUES(current_date,'payment',50000,'guard')`);
-  await refused("edit a payment", `UPDATE statement_credits SET amount_aed_cents=1 WHERE description='guard'`);
+  // Until its statement is sent a payment can be corrected (migration 016); after that it is fixed.
+  await accepted("correct an unsent payment, with its person and company", `UPDATE statement_credits SET amount_aed_cents=40000,beneficiary='Guard Person',company_name='Guard Co' WHERE description='guard'`);
+  await refused("change who entered a payment", `UPDATE statement_credits SET created_at=created_at-interval '1 day' WHERE description='guard'`);
   await refused("delete a payment", `DELETE FROM statement_credits WHERE description='guard'`);
+  await accepted("sending the statement locks the payment", `UPDATE statement_credits SET locked_at=now() WHERE description='guard'`);
+  await refused("edit a payment after its statement was sent", `UPDATE statement_credits SET amount_aed_cents=1 WHERE description='guard'`);
+  await refused("unlock a sent payment", `UPDATE statement_credits SET locked_at=NULL WHERE description='guard'`);
   await refused("statement whose closing does not add up", `INSERT INTO monthly_statements(month,opening_aed_cents,charges_aed_cents,credits_aed_cents,closing_aed_cents,lines) VALUES('2020-01-01',100,50,20,131,1)`);
   await refused("statement dated mid-month", `INSERT INTO monthly_statements(month,opening_aed_cents,charges_aed_cents,credits_aed_cents,closing_aed_cents,lines) VALUES('2020-01-15',100,50,20,130,1)`);
   await accepted("statement that balances", `INSERT INTO monthly_statements(month,opening_aed_cents,charges_aed_cents,credits_aed_cents,closing_aed_cents,lines) VALUES('2020-01-01',100,50,20,130,1)`);
@@ -182,8 +200,24 @@ try {
   await refused("reject a contract without a reason", `UPDATE contracts SET status='rejected' WHERE id=$1`, [ct]);
   await accepted("add a priced line while under review", `INSERT INTO contract_line_items(contract_id,service_key,service_label,hours_per_month,base_salary_cents,flat_cost_cents,multiplier,standard_hours,monthly_full_time_cents,monthly_price_cents,line_total_cents)
       VALUES($1,'devops','DevOps',80,100000,100000,3,160,600000,300000,1800000)`, [ct]);
+  // Weeks on site (migration 014): 1-4 weeks a month, 1-7 days a week, both or neither.
+  await accepted("line priced on two weeks a month, six days a week", `INSERT INTO contract_line_items(contract_id,service_key,service_label,hours_per_month,base_salary_cents,flat_cost_cents,multiplier,standard_hours,monthly_full_time_cents,monthly_price_cents,line_total_cents,weeks_per_month,days_per_week)
+      VALUES($1,'consultant','Consultant',96,250000,100000,3,192,1050000,525000,3150000,2,6)`, [ct]);
+  await refused("line priced on five weeks a month", `INSERT INTO contract_line_items(contract_id,service_key,service_label,hours_per_month,base_salary_cents,flat_cost_cents,multiplier,standard_hours,monthly_full_time_cents,monthly_price_cents,line_total_cents,weeks_per_month,days_per_week)
+      VALUES($1,'it_support','IT Support',240,100000,100000,3,192,600000,750000,4500000,5,6)`, [ct]);
+  await refused("line with weeks but no days", `INSERT INTO contract_line_items(contract_id,service_key,service_label,hours_per_month,base_salary_cents,flat_cost_cents,multiplier,standard_hours,monthly_full_time_cents,monthly_price_cents,line_total_cents,weeks_per_month)
+      VALUES($1,'cybersecurity','Cybersecurity',96,100000,100000,3,192,600000,300000,1800000,2)`, [ct]);
+  // Discount or profit (migration 015): set while under review, frozen once approved.
+  await refused("discount above 90%", `UPDATE contracts SET adjustment_kind='discount',adjustment_bps=9500,discount_cents=100 WHERE id=$1`, [ct]);
+  await refused("a profit that carries a discount amount", `UPDATE contracts SET adjustment_kind='markup',adjustment_bps=2000,discount_cents=100 WHERE id=$1`, [ct]);
+  await refused("a percentage with no kind", `UPDATE contracts SET adjustment_bps=1000 WHERE id=$1`, [ct]);
+  // This guard contract already has its invoices, so the total stays put here; in the app the invoices
+  // are written at approval, after the discount has set the total.
+  await accepted("a 10% discount while under review", `UPDATE contracts SET adjustment_kind='discount',adjustment_bps=1000,discount_cents=0,list_total_cents=total_cents WHERE id=$1`, [ct]);
   await accepted("approve the contract", `UPDATE contracts SET status='approved' WHERE id=$1`, [ct]);
   await refused("change the price after approval", `UPDATE contracts SET total_cents=total_cents+1,subtotal_cents=subtotal_cents+1 WHERE id=$1`, [ct]);
+  await refused("change the discount after approval", `UPDATE contracts SET adjustment_bps=500,discount_cents=500 WHERE id=$1`, [ct]);
+  await refused("remove the discount after approval", `UPDATE contracts SET adjustment_kind=NULL,adjustment_bps=0,discount_cents=0 WHERE id=$1`, [ct]);
   await refused("change a line after approval", `DELETE FROM contract_line_items WHERE contract_id=$1`, [ct]);
   await accepted("send the contract", `UPDATE contracts SET status='contract_sent',contract_sent_at=now() WHERE id=$1`, [ct]);
   await refused("mark signed with no evidence", `UPDATE contracts SET status='signed' WHERE id=$1`, [ct]);

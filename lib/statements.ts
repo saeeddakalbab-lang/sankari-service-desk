@@ -14,9 +14,11 @@ export const accountingSchema = z.object({
   recipientEmail: z.string().trim().toLowerCase().email().max(254).or(z.literal("")),
   openingBalanceAedCents: z.string().regex(/^-?\d{1,15}$/),
   openingMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
+  // The day the card cycle starts (1-28). 1 = calendar months; 16 = the 16th to the 15th.
+  cycleDay: z.number().int().min(1).max(28),
 });
 export type Accounting = z.infer<typeof accountingSchema>;
-export const DEFAULT_ACCOUNTING: Accounting = { recipientEmail: "", openingBalanceAedCents: "0", openingMonth: "2026-09" };
+export const DEFAULT_ACCOUNTING: Accounting = { recipientEmail: "", openingBalanceAedCents: "0", openingMonth: "2026-09", cycleDay: 1 };
 export async function getAccounting(): Promise<Accounting> {
   const v = await getSetting<Partial<Accounting>>("accounting", {}), p = accountingSchema.safeParse({ ...DEFAULT_ACCOUNTING, ...v });
   return p.success ? p.data : DEFAULT_ACCOUNTING;
@@ -26,9 +28,14 @@ export const monthRe = /^\d{4}-(0[1-9]|1[0-2])$/;
 const firstDay = (m: string) => `${m}-01`;
 export const nextMonth = (m: string) => { const [y, mo] = m.split("-").map(Number); return mo === 12 ? `${y + 1}-01` : `${y}-${String(mo + 1).padStart(2, "0")}`; };
 export const prevMonth = (m: string) => { const [y, mo] = m.split("-").map(Number); return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, "0")}`; };
+// A statement is named by the month it closes in, like the card statement. With cycle day 16,
+// "2026-09" runs from 16 Aug to 15 Sep. With cycle day 1 it is the calendar month.
+export const periodStart = (m: string, cycleDay: number) => cycleDay <= 1 ? `${m}-01` : `${prevMonth(m)}-${String(cycleDay).padStart(2, "0")}`;
+export const periodEndExclusive = (m: string, cycleDay: number) => periodStart(nextMonth(m), cycleDay);
+export const periodLastDay = (m: string, cycleDay: number) => { const d = new Date(`${periodEndExclusive(m, cycleDay)}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 
 export type StatementLine = { date: string; kind: "charge" | "payment" | "refund"; reference: string; service: string; beneficiary: string; company: string; original: string; debitAedCents: string; creditAedCents: string; approvedBy: string };
-export type Statement = { month: string; openingAedCents: string; chargesAedCents: string; creditsAedCents: string; closingAedCents: string; lines: StatementLine[];
+export type Statement = { month: string; periodStart: string; periodEnd: string; openingAedCents: string; chargesAedCents: string; creditsAedCents: string; closingAedCents: string; lines: StatementLine[];
   byBeneficiary: { name: string; aedCents: string; count: number }[]; byCompany: { name: string; aedCents: string; count: number }[];
   stored: { generatedAt: string; sentAt: string | null; sentBy: string | null; emailState: string | null; recipient: string | null } | null; accounting: Accounting };
 
@@ -38,18 +45,19 @@ export async function buildStatement(month: string): Promise<Statement> {
   if (!monthRe.test(month)) throw new AppError("Month must look like 2026-09");
   const acc = await getAccounting();
   if (month < acc.openingMonth) throw new AppError(`Statements start from ${acc.openingMonth}, the month the opening balance was entered for`, 409);
+  const cd = acc.cycleDay, from = periodStart(month, cd), to = periodEndExclusive(month, cd);
   // Opening = the entered opening balance + everything charged minus everything credited before this month.
   const before = (await query<{ charges: string; credits: string }>(`SELECT
       (SELECT coalesce(sum(amount_aed_cents),0)::text FROM subscription_bills WHERE billed_on >= $1::date AND billed_on < $2::date) charges,
-      (SELECT coalesce(sum(amount_aed_cents),0)::text FROM statement_credits WHERE occurred_on >= $1::date AND occurred_on < $2::date) credits`, [firstDay(acc.openingMonth), firstDay(month)])).rows[0];
+      (SELECT coalesce(sum(amount_aed_cents),0)::text FROM statement_credits WHERE occurred_on >= $1::date AND occurred_on < $2::date) credits`, [periodStart(acc.openingMonth, cd), from])).rows[0];
   const opening = BigInt(acc.openingBalanceAedCents) + BigInt(before.charges) - BigInt(before.credits);
   const bills = (await query<{ billed_on: string; id: string; tool: string; beneficiary: string; company_name: string; amount_cents: string; currency: string; amount_aed_cents: string; approved_by: string | null; request_id: string | null }>(
     `SELECT to_char(b.billed_on,'YYYY-MM-DD') billed_on,b.id,b.tool,coalesce(nullif(b.beneficiary,''),s.beneficiary,'') beneficiary,b.company_name,b.amount_cents::text,b.currency,b.amount_aed_cents::text,u.name approved_by,b.request_id
        FROM subscription_bills b JOIN subscriptions s ON s.id=b.subscription_id LEFT JOIN users u ON u.id=b.approved_by_user_id
-      WHERE b.billed_on >= $1::date AND b.billed_on < $2::date ORDER BY b.billed_on, b.created_at`, [firstDay(month), firstDay(nextMonth(month))])).rows;
+      WHERE b.billed_on >= $1::date AND b.billed_on < $2::date ORDER BY b.billed_on, b.created_at`, [from, to])).rows;
   const credits = (await query<{ occurred_on: string; id: string; kind: "payment" | "refund"; amount_aed_cents: string; description: string }>(
     `SELECT to_char(occurred_on,'YYYY-MM-DD') occurred_on,id,kind,amount_aed_cents::text,description FROM statement_credits WHERE occurred_on >= $1::date AND occurred_on < $2::date ORDER BY occurred_on, created_at`,
-    [firstDay(month), firstDay(nextMonth(month))])).rows;
+    [from, to])).rows;
   const lines: StatementLine[] = [
     ...bills.map(b => ({ date: b.billed_on, kind: "charge" as const, reference: `BILL-${b.id.slice(0, 8).toUpperCase()}`, service: b.tool, beneficiary: b.beneficiary || "—", company: b.company_name || "—",
       original: `${b.currency} ${dec(b.amount_cents)}`, debitAedCents: b.amount_aed_cents, creditAedCents: "0", approvedBy: b.approved_by || "—" })),
@@ -61,7 +69,7 @@ export async function buildStatement(month: string): Promise<Statement> {
     .map(([name, g]) => ({ name, aedCents: g.aed.toString(), count: g.count })).sort((a, b) => Number(BigInt(b.aedCents) - BigInt(a.aedCents)));
   const st = (await query<{ generated_at: string; sent_at: string | null; sent_by: string | null; state: string | null; recipient: string | null }>(
     `SELECT m.generated_at,m.sent_at,u.name sent_by,o.state,o.recipient FROM monthly_statements m LEFT JOIN users u ON u.id=m.sent_by_user_id LEFT JOIN email_outbox o ON o.id=m.email_outbox_id WHERE m.month=$1::date`, [firstDay(month)])).rows[0];
-  return { month, openingAedCents: opening.toString(), chargesAedCents: charges.toString(), creditsAedCents: creditSum.toString(), closingAedCents: (opening + charges - creditSum).toString(), lines,
+  return { month, periodStart: from, periodEnd: periodLastDay(month, cd), openingAedCents: opening.toString(), chargesAedCents: charges.toString(), creditsAedCents: creditSum.toString(), closingAedCents: (opening + charges - creditSum).toString(), lines,
     byBeneficiary: group(b => b.beneficiary), byCompany: group(b => b.company_name),
     stored: st ? { generatedAt: st.generated_at, sentAt: st.sent_at, sentBy: st.sent_by, emailState: st.state, recipient: st.recipient } : null, accounting: acc };
 }
@@ -71,7 +79,7 @@ export function statementXlsx(s: Statement) {
   const n = (c: string) => Number(dec(c));
   const head: Cell[] = ["التاريخ", "المرجع", "الخدمة", "المستفيد", "الشركة", "المبلغ الأصلي", "مدين (درهم)", "دائن (درهم)", "الرصيد (درهم)", "اعتمده"];
   let bal = BigInt(s.openingAedCents);
-  const rows: Cell[][] = [head, [`${s.month}-01`, "", "الرصيد الافتتاحي", "", "", "", null, null, n(s.openingAedCents), ""],
+  const rows: Cell[][] = [head, [s.periodStart, "", "الرصيد الافتتاحي", "", "", "", null, null, n(s.openingAedCents), ""],
     ...s.lines.map(l => { bal += BigInt(l.debitAedCents) - BigInt(l.creditAedCents); return [l.date, l.reference, l.service, l.beneficiary, l.company, l.original, l.debitAedCents === "0" ? null : n(l.debitAedCents), l.creditAedCents === "0" ? null : n(l.creditAedCents), n(bal.toString()), l.approvedBy] as Cell[]; }),
     ["", "", "الرصيد الختامي", "", "", "", n(s.chargesAedCents), n(s.creditsAedCents), n(s.closingAedCents), ""]];
   const breakdown = (title: string, g: Statement["byBeneficiary"]): Cell[][] => [[title, "عدد الحركات", "المجموع (درهم)"], ...g.map(x => [x.name, x.count, n(x.aedCents)] as Cell[])];
@@ -93,8 +101,8 @@ export async function generateStatement(month: string, userId: string | null) {
   const file = statementXlsx(s), filename = `sankari-subscriptions-statement-${month}.xlsx`;
   const url = new URL(`/admin/statements?month=${month}`, base()).href, subject = `[Sankari] كشف الاشتراكات ${month} · Subscriptions statement`;
   const summary: [string, string][] = [["الرصيد الافتتاحي · Opening", dec(s.openingAedCents)], ["المصروفات · Charges", dec(s.chargesAedCents)], ["الدفعات والاستردادات · Payments & refunds", dec(s.creditsAedCents)], ["الرصيد الختامي · Closing", dec(s.closingAedCents)]];
-  const html = emailShell(`كشف الاشتراكات لشهر ${month}`, `${para(`مرفق كشف الاشتراكات لشهر ${month} بصيغة Excel، مع التفصيل حسب المستفيد وحسب الشركة. المبالغ بالدرهم الإماراتي.`)}${rowsTable(summary.map(([k, v]) => [k, `AED ${v}`] as [string, string]))}<p style="margin:20px 0 0;font-size:13px;color:#5E564D">${s.lines.length} حركة</p><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-top:14px">${button(url, "عرض الكشف في البوابة")}</td></tr></table>`, { lang: "ar" });
-  const text = `Sankari Holding — Subscriptions statement ${month}\n\n${summary.map(([k, v]) => `${k}: AED ${v}`).join("\n")}\n\n${s.lines.length} lines. The Excel file is attached.\nView in the portal: ${url}`;
+  const html = emailShell(`كشف الاشتراكات لشهر ${month}`, `${para(`مرفق كشف الاشتراكات لشهر ${month} (من ${s.periodStart} إلى ${s.periodEnd}) بصيغة Excel، مع التفصيل حسب المستفيد وحسب الشركة. المبالغ بالدرهم الإماراتي.`)}${rowsTable(summary.map(([k, v]) => [k, `AED ${v}`] as [string, string]))}<p style="margin:20px 0 0;font-size:13px;color:#5E564D">${s.lines.length} حركة</p><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="padding-top:14px">${button(url, "عرض الكشف في البوابة")}</td></tr></table>`, { lang: "ar" });
+  const text = `Sankari Holding — Subscriptions statement ${month} (${s.periodStart} to ${s.periodEnd})\n\n${summary.map(([k, v]) => `${k}: AED ${v}`).join("\n")}\n\n${s.lines.length} lines. The Excel file is attached.\nView in the portal: ${url}`;
   return transaction(async c => {
     const existing = (await c.query<{ id: string; sent_at: string | null; email_outbox_id: string | null }>(`SELECT id,sent_at,email_outbox_id FROM monthly_statements WHERE month=$1::date FOR UPDATE`, [firstDay(month)])).rows[0];
     if (existing?.sent_at) throw new AppError("This month's statement was already sent to accounting", 409);
@@ -133,16 +141,19 @@ export async function addCredit(input: z.infer<typeof creditSchema>, userId: str
   return r;
 }
 
-// Worker: on the 1st of the month from 06:00 Istanbul time, prepare last month's statement (held).
-// Which month is due at this moment: last month, once it is 06:00 on the 1st in Istanbul (or any later day).
-export function statementMonthDue(now: Date) {
+// Worker: the morning after a cycle closes (06:00 Istanbul), prepare that statement (held).
+// Which statement is due at this moment: the latest one whose cycle has closed. On the closing
+// morning itself it waits until 06:00. With cycle day 1 that is last month, from the 1st.
+export function statementMonthDue(now: Date, cycleDay = 1) {
   const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Istanbul", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23" }).formatToParts(now).map(x => [x.type, x.value]));
-  return p.day === "01" && Number(p.hour) < 6 ? null : prevMonth(`${p.year}-${p.month}`);
+  const today = `${p.year}-${p.month}-${p.day}`;
+  let m = `${p.year}-${p.month}`;
+  if (periodEndExclusive(m, cycleDay) > today) m = prevMonth(m);
+  return periodEndExclusive(m, cycleDay) === today && Number(p.hour) < 6 ? null : m;
 }
 export async function runMonthlyStatement(now = new Date()) {
-  const month = statementMonthDue(now);
+  const acc = await getAccounting(), month = statementMonthDue(now, acc.cycleDay);
   if (!month) return null;
-  const acc = await getAccounting();
   if (!acc.recipientEmail || month < acc.openingMonth) return null;
   if ((await query(`SELECT 1 FROM monthly_statements WHERE month=$1::date`, [firstDay(month)])).rowCount) return null;
   return generateStatement(month, null);

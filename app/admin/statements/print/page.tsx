@@ -24,7 +24,7 @@ export default async function StatementPrint({ searchParams }: { searchParams: P
   return <div className="print-doc" lang="ar" dir="rtl">
     <header className="print-head">
       <div><Logo tone="dark" width={96} /></div>
-      <div style={{ textAlign: "left" }}><h1>{t("st2.printTitle")} · <bdi dir="ltr">{s.month}</bdi></h1><p className="soft">{t("st2.printedOn", { date: fmtDateTime(new Date()) })}</p></div>
+      <div style={{ textAlign: "left" }}><h1>{t("st2.printTitle")} · <bdi dir="ltr">{s.month}</bdi></h1><p><bdi dir="ltr">{s.periodStart} → {s.periodEnd}</bdi></p><p className="soft">{t("st2.printedOn", { date: fmtDateTime(new Date()) })}</p></div>
     </header>
     <div className="no-print" style={{ margin: "12px 0" }}><PrintButton label={t("st2.print")} /></div>
     <dl className="print-totals">
@@ -34,7 +34,7 @@ export default async function StatementPrint({ searchParams }: { searchParams: P
     <table className="print-table">
       <thead><tr><th>{t("st2.date")}</th><th>{t("st2.ref")}</th><th>{t("st2.service")}</th><th>{t("subs.beneficiary")}</th><th>{t("bills.company")}</th><th>{t("st2.original")}</th><th>{t("st2.debit")}</th><th>{t("st2.credit")}</th><th>{t("st2.balance")}</th><th>{t("st2.approvedBy")}</th></tr></thead>
       <tbody>
-        <tr><td dir="ltr">{s.month}-01</td><td /><td><strong>{t("st2.opening")}</strong></td><td /><td /><td /><td /><td /><td dir="ltr">{aed(s.openingAedCents)}</td><td /></tr>
+        <tr><td dir="ltr">{s.periodStart}</td><td /><td><strong>{t("st2.opening")}</strong></td><td /><td /><td /><td /><td /><td dir="ltr">{aed(s.openingAedCents)}</td><td /></tr>
         {s.lines.map(l => { bal += BigInt(l.debitAedCents) - BigInt(l.creditAedCents); return <tr key={l.reference}>
           <td dir="ltr">{l.date}</td><td dir="ltr">{l.reference}</td><td>{l.kind === "charge" ? l.service : `${t(l.kind === "payment" ? "st2.kind.payment" : "st2.kind.refund")}${l.service ? ` · ${l.service}` : ""}`}</td>
           <td>{l.beneficiary}</td><td>{l.company}</td><td dir="ltr">{l.original}</td><td dir="ltr">{l.debitAedCents !== "0" ? aed(l.debitAedCents) : ""}</td><td dir="ltr">{l.creditAedCents !== "0" ? aed(l.creditAedCents) : ""}</td><td dir="ltr">{aed(bal.toString())}</td><td>{l.approvedBy}</td></tr>; })}

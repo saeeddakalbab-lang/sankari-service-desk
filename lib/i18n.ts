@@ -485,6 +485,9 @@ const en = {
   "adj.discountLine": "Discount {p}%",
   "adj.markupNote": "Internal: {p}% profit is built into the prices. Price-list total {list}, profit {profit}. The client never sees this line.",
   "pl.edit": "Edit in Admin settings",
+  "st2.cycleDay": "Cycle start day",
+  "st2.cycleHint": "Each statement runs from day {d} to day {e} of the next month, named by the month it closes in, and is prepared the morning after it closes. It cannot change once a statement has been sent.",
+  "st2.cycleHintCalendar": "Day 1: calendar months, prepared on the 1st. It cannot change once a statement has been sent.",
   "q.title": "Team queue", "q.lead": "Every request. Assign work, update status and keep the history accurate.",
   "q.total": "Total", "q.open": "Open", "q.overdue": "Overdue", "q.unassigned": "Unassigned",
 
@@ -965,6 +968,9 @@ const ar: Record<Key, string> = {
   "adj.discountLine": "خصم {p}%",
   "adj.markupNote": "داخلي: نسبة ربح {p}% مضافة إلى الأسعار. إجمالي قائمة الأسعار {list}، والربح {profit}. لا يرى العميل هذا السطر.",
   "pl.edit": "التعديل من إعدادات المسؤول",
+  "st2.cycleDay": "يوم بداية الدورة",
+  "st2.cycleHint": "يغطي كل كشف الفترة من يوم {d} حتى يوم {e} من الشهر التالي، ويُسمّى بالشهر الذي يُغلق فيه، ويُجهَّز صباح اليوم التالي للإغلاق. لا يمكن تغييره بعد إرسال أول كشف.",
+  "st2.cycleHintCalendar": "اليوم 1: أشهر ميلادية كاملة، ويُجهَّز الكشف في أول الشهر. لا يمكن تغييره بعد إرسال أول كشف.",
   "q.title": "قائمة الفريق", "q.lead": "كل الطلبات. أسند العمل وحدّث الحالة وحافظ على دقة السجل.",
   "q.total": "الإجمالي", "q.open": "مفتوحة", "q.overdue": "متأخرة", "q.unassigned": "غير مُسندة",
 

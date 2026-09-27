@@ -43,11 +43,11 @@ export function StatementView({ s, admin, today }: { s: Statement; admin: boolea
     {!admin && <div className="row no-print"><a className="btn" href={`/api/statements/${s.month}/xlsx`} download>{t("st2.excel")}</a><a className="btn" href={`/admin/statements/print?month=${s.month}`} target="_blank" rel="noreferrer">{t("st2.print")}</a></div>}
 
     <section className="card" aria-labelledby="lines-h">
-      <div className="card-head"><h2 id="lines-h">{t("st2.lines")} · {s.month}</h2><span className="soft mono">{s.lines.length}</span></div>
+      <div className="card-head"><h2 id="lines-h">{t("st2.lines")} · {s.month} <span className="soft mono" style={{ fontSize: 13, fontWeight: 400 }} dir="ltr">{s.periodStart} → {s.periodEnd}</span></h2><span className="soft mono">{s.lines.length}</span></div>
       <div className="table-wrap"><table className="table">
         <thead><tr><th scope="col">{t("st2.date")}</th><th scope="col">{t("st2.ref")}</th><th scope="col">{t("st2.service")}</th><th scope="col">{t("subs.beneficiary")}</th><th scope="col">{t("bills.company")}</th><th scope="col">{t("st2.original")}</th><th scope="col">{t("st2.debit")}</th><th scope="col">{t("st2.credit")}</th><th scope="col">{t("st2.balance")}</th><th scope="col">{t("st2.approvedBy")}</th></tr></thead>
         <tbody>
-          <tr><td className="mono" dir="ltr">{s.month}-01</td><td /><td><strong>{t("st2.opening")}</strong></td><td /><td /><td /><td /><td /><td className="mono" dir="ltr">{aed(s.openingAedCents)}</td><td /></tr>
+          <tr><td className="mono" dir="ltr">{s.periodStart}</td><td /><td><strong>{t("st2.opening")}</strong></td><td /><td /><td /><td /><td /><td className="mono" dir="ltr">{aed(s.openingAedCents)}</td><td /></tr>
           {s.lines.map(l => { bal += BigInt(l.debitAedCents) - BigInt(l.creditAedCents); return <tr key={l.reference}>
             <td className="mono" dir="ltr" style={{ whiteSpace: "nowrap" }}>{l.date}</td><td className="mono" dir="ltr" style={{ fontSize: 12 }}>{l.reference}</td>
             <td>{l.kind === "charge" ? l.service : <>{t(`st2.kind.${l.kind}` as I18nKey)}{l.service ? ` · ${l.service}` : ""}</>}</td><td>{l.beneficiary}</td><td>{l.company}</td>
@@ -83,10 +83,12 @@ export function StatementView({ s, admin, today }: { s: Statement; admin: boolea
       <form className="card card-pad stack" aria-labelledby="acc-h" onSubmit={e => { e.preventDefault(); const m = /^(-?)(\d{1,13})(?:\.(\d{1,2}))?$/.exec(openingText.trim()); if (!m) { setMsg({ area: "acc", ok: false, text: t("st2.openingBal") }); return; } const cents = (BigInt(m[2]) * 100n + BigInt((m[3] || "").padEnd(2, "0"))) * (m[1] ? -1n : 1n); call("acc", "/api/admin/accounting", "PUT", { ...acc, openingBalanceAedCents: cents.toString() }); }}>
         <h2 id="acc-h" style={{ fontSize: 17 }}>{t("st2.settings")}</h2>
         <div className="field"><label className="label" htmlFor="a-mail">{t("st2.recipient")}</label><input className="input mono" id="a-mail" type="email" dir="ltr" value={acc.recipientEmail} onChange={e => setAcc({ ...acc, recipientEmail: e.target.value.trim() })} /></div>
-        <div className="grid-2">
+        <div className="grid-3">
+          <div className="field"><label className="label" htmlFor="a-cycle">{t("st2.cycleDay")}</label><select className="select mono" id="a-cycle" value={acc.cycleDay} onChange={e => setAcc({ ...acc, cycleDay: Number(e.target.value) })} aria-describedby="a-cycle-h">{Array.from({ length: 28 }, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}</select></div>
           <div className="field"><label className="label" htmlFor="a-open">{t("st2.openingBal")}</label><input className="input mono" id="a-open" dir="ltr" inputMode="decimal" value={openingText} onChange={e => setOpeningText(e.target.value)} /></div>
           <div className="field"><label className="label" htmlFor="a-month">{t("st2.openingMonth")}</label><input className="input mono" id="a-month" type="month" value={acc.openingMonth} onChange={e => setAcc({ ...acc, openingMonth: e.target.value })} /></div>
         </div>
+        <span id="a-cycle-h" className="hint">{t(acc.cycleDay > 1 ? "st2.cycleHint" : "st2.cycleHintCalendar", { d: acc.cycleDay, e: acc.cycleDay - 1 })}</span>
         <Msg area="acc" />
         <div><button type="submit" className="btn btn-primary" disabled={busy}>{t("st2.saveSettings")}</button></div>
       </form>

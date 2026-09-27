@@ -415,3 +415,11 @@ On **Subscriptions**: recording from an approved request now asks for the actual
 currency and the rate to AED; **Renew** asks the same, pre-filled from last time; **Record a phone
 approval** adds a new subscription or a renewal approved on a call. All three write bills, so they
 appear in bill history and the accounting statement. The rate is frozen on each bill.
+
+# Step P: close two NULL holes in contract checks (migration 018)
+
+Same routine: dump with `STEP=018`, then deploy.
+
+| Migration | What it does | Rollback |
+|---|---|---|
+| `018_tighten_contract_checks.sql` | Rewrites `contract_lines_weeks_valid` and `contracts_adjustment_valid` so a line cannot have weeks without days and a contract cannot carry a percentage without a kind (a CHECK that evaluates to NULL passes; the CI guard run caught both). If an existing row breaks the rule it stops and names the rows; it never changes data. | `db/rollback/018_tighten_contract_checks.down.sql`: restores the looser checks. |

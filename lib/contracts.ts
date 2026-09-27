@@ -4,7 +4,7 @@ import { query, transaction } from "./db";
 import { AppError } from "./errors";
 import { button, emailShell, para, rowsTable } from "./email-layout";
 import { usdToAedCents } from "./money";
-import { DEFAULT_PRICING, midpointMonths, quote, quoteInputSchema, type PricingConfig } from "./pricing";
+import { DEFAULT_PRICING, midpointMonths, quote, quoteInputSchema, withWorkPattern, workload, type PricingConfig } from "./pricing";
 import { getSetting, getUsdToAedRate } from "./settings";
 import type { User } from "./types";
 
@@ -13,10 +13,31 @@ import type { User } from "./types";
 // final invoices scheduled) -> completed. Every step is audited and emailed; the database refuses any
 // step out of order (migration 013).
 
+// The price list admins edit: each service's base salary, the flat cost and the multiplier.
+// Saved contracts keep the figures they were priced with; a change applies to new requests only.
+export const pricingEditSchema = z.object({
+  flatCostCents: z.number().int().min(0).max(100_000_000),
+  multiplier: z.number().int().min(1).max(20),
+  baseSalaries: z.record(z.string(), z.number().int().min(0).max(100_000_000)),
+});
+export async function savePricing(input: z.infer<typeof pricingEditSchema>, userId: string, ipHash: string) {
+  const current = await getPricing();
+  const unknown = Object.keys(input.baseSalaries).filter(k => !current.services[k]);
+  if (unknown.length) throw new AppError(`Unknown service: ${unknown.join(", ")}`);
+  const services = Object.fromEntries(Object.entries(current.services).map(([k, s]) => [k, { ...s, baseSalaryCents: input.baseSalaries[k] ?? s.baseSalaryCents }]));
+  const next = { ...current, flatCostCents: input.flatCostCents, multiplier: input.multiplier, services };
+  await transaction(async c => {
+    const before = (await c.query(`SELECT value FROM settings WHERE key='pricing' FOR UPDATE`)).rows[0]?.value ?? null;
+    await c.query(`INSERT INTO settings(key,value,updated_by) VALUES('pricing',$1,$2) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by`, [JSON.stringify(next), userId]);
+    await c.query(`INSERT INTO audit_log(actor_id,action,before_data,after_data,ip_hash) VALUES($1,'settings.pricing',$2,$3,$4)`, [userId, JSON.stringify(before), JSON.stringify(next), ipHash]);
+  });
+  return getPricing();
+}
+
 export async function getPricing(): Promise<PricingConfig> {
   const v = await getSetting<Partial<PricingConfig>>("pricing", {});
   const cfg = { ...DEFAULT_PRICING, ...v, services: { ...(v.services && Object.keys(v.services).length ? v.services : DEFAULT_PRICING.services) } };
-  return [cfg.standardHours, cfg.multiplier].every(n => Number.isInteger(n) && n > 0) ? cfg : DEFAULT_PRICING;
+  return [cfg.hoursPerDay, cfg.daysPerWeek, cfg.weeksPerMonth, cfg.multiplier].every(n => Number.isInteger(n) && n > 0) ? withWorkPattern(cfg) : DEFAULT_PRICING;
 }
 async function getTerms() {
   const v = await getSetting<{ signingBps?: number; midpointBps?: number; finalBps?: number; paymentTermsDays?: number }>("installments", {});
@@ -57,12 +78,12 @@ export async function submitContractRequest(raw: unknown, ipHash: string) {
     const ct = (await c.query<{ id: string }>(`INSERT INTO contracts(reference,company_name,contact_name,contact_email,contact_phone,requirements,support_type,requested_start_date,duration_months,currency,subtotal_cents,onsite_premium_cents,total_cents,pricing_snapshot,status)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'submitted') RETURNING id`,
       [reference, input.companyName, input.contactName, input.contactEmail, input.contactPhone, input.requirements, input.supportType, input.requestedStartDate, input.durationMonths, q.currency, q.subtotalCents.toString(), q.onsitePremiumCents.toString(), q.totalCents.toString(), JSON.stringify(snapshot)])).rows[0];
-    for (const l of q.lines) await c.query(`INSERT INTO contract_line_items(contract_id,service_key,service_label,hours_per_month,base_salary_cents,flat_cost_cents,multiplier,standard_hours,monthly_full_time_cents,monthly_price_cents,line_total_cents) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [ct.id, l.serviceKey, l.label, l.hoursPerMonth, l.baseSalaryCents, l.flatCostCents, l.multiplier, l.standardHours, l.monthlyFullTimeCents.toString(), l.monthlyPriceCents.toString(), l.lineTotalCents.toString()]);
+    for (const l of q.lines) await c.query(`INSERT INTO contract_line_items(contract_id,service_key,service_label,hours_per_month,base_salary_cents,flat_cost_cents,multiplier,standard_hours,monthly_full_time_cents,monthly_price_cents,line_total_cents,weeks_per_month,days_per_week) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [ct.id, l.serviceKey, l.label, l.hoursPerMonth, l.baseSalaryCents, l.flatCostCents, l.multiplier, l.standardHours, l.monthlyFullTimeCents.toString(), l.monthlyPriceCents.toString(), l.lineTotalCents.toString(), l.weeksPerMonth, l.daysPerWeek]);
     await audit(c, null, "contract.submitted", { contractId: ct.id, reference, company: input.companyName, totalCents: q.totalCents.toString() }, ipHash);
     return { id: ct.id, reference };
   });
-  const rows: [string, string][] = [["Reference", saved.reference], ...q.lines.map(l => [l.label, `${l.hoursPerMonth} h/month · ${usd(l.monthlyPriceCents)} / month`] as [string, string]), ["Support", input.supportType === "onsite" ? "Onsite" : "Remote"], ["Start", input.requestedStartDate], ["Duration", `${input.durationMonths} months`], ["Estimated total", usd(q.totalCents)]];
+  const rows: [string, string][] = [["Reference", saved.reference], ...q.lines.map(l => [l.label, `${workload(l.weeksPerMonth, l.daysPerWeek, l.hoursPerMonth)} · ${usd(l.monthlyPriceCents)} / month`] as [string, string]), ["Support", input.supportType === "onsite" ? "Onsite" : "Remote"], ["Start", input.requestedStartDate], ["Duration", `${input.durationMonths} months`], ["Estimated total", usd(q.totalCents)]];
   await mail(`contract-received:${saved.id}`, input.contactEmail, `We received your contract request ${saved.reference}`, [`Dear ${input.contactName},`, `Thank you. Our team will review your request and reply by email. Nothing is charged until you receive and confirm a contract.`, `شكرًا لكم. سيراجع فريقنا طلبكم ويرد عليكم بالبريد. لا يُحتسب أي مبلغ قبل أن تصلكم الاتفاقية وتؤكدوها.`], rows);
   for (const a of await admins()) await mail(`contract-new:${saved.id}:${a}`, a, `New contract request ${saved.reference} · ${input.companyName}`, [`${input.contactName} (${input.contactEmail}) asked for a contract.`, input.requirements.slice(0, 600)], rows, { href: new URL(`/admin/contracts/${saved.id}`, base()).href, label: "Review the request" });
   return { reference: saved.reference, totalCents: q.totalCents.toString(), currency: q.currency };
@@ -79,7 +100,7 @@ export async function getContract(id: string) {
   const c = (await query(`SELECT c.*,c.status::text status,c.support_type::text support_type,to_char(c.requested_start_date,'YYYY-MM-DD') requested_start_date,to_char(c.start_date,'YYYY-MM-DD') start_date,to_char(c.end_date,'YYYY-MM-DD') end_date,
       c.total_cents::text total_cents,c.subtotal_cents::text subtotal_cents,c.onsite_premium_cents::text onsite_premium_cents,u.name reviewed_by_name FROM contracts c LEFT JOIN users u ON u.id=c.reviewed_by WHERE c.id=$1`, [id])).rows[0];
   if (!c) return null;
-  const lines = (await query(`SELECT service_key,service_label,hours_per_month,monthly_full_time_cents::text,monthly_price_cents::text,line_total_cents::text FROM contract_line_items WHERE contract_id=$1 ORDER BY created_at`, [id])).rows;
+  const lines = (await query(`SELECT service_key,service_label,hours_per_month,weeks_per_month,days_per_week,monthly_full_time_cents::text,monthly_price_cents::text,line_total_cents::text FROM contract_line_items WHERE contract_id=$1 ORDER BY created_at`, [id])).rows;
   const invoices = (await query(`SELECT id,reference,installment::text,share_bps,amount_cents::text,currency,due_trigger,to_char(due_date,'YYYY-MM-DD') due_date,status::text,sent_at,paid_at,paid_amount_cents::text FROM invoices WHERE contract_id=$1 ORDER BY array_position(ARRAY['signing','midpoint','final'],installment::text)`, [id])).rows;
   const assignments = (await query(`SELECT a.id,coalesce(u.name,a.staff_name) staff,a.service_key,a.monthly_cost_cents::text,to_char(a.started_on,'YYYY-MM-DD') started_on,to_char(a.ended_on,'YYYY-MM-DD') ended_on FROM contract_assignments a LEFT JOIN users u ON u.id=a.user_id WHERE a.contract_id=$1 ORDER BY a.created_at`, [id])).rows;
   const history = (await query(`SELECT a.action,a.created_at,u.name actor,a.after_data FROM audit_log a LEFT JOIN users u ON u.id=a.actor_id WHERE a.action LIKE 'contract.%' AND a.after_data->>'contractId'=$1 ORDER BY a.created_at`, [id])).rows;
@@ -141,12 +162,12 @@ export async function contractAction(id: string, input: z.infer<typeof actionSch
     const salutation = `Dear ${ct.contact_name},`;
     if (input.action === "approve") {
       const inv = (await query<{ reference: string; amount_cents: string }>(`SELECT reference,amount_cents::text FROM invoices WHERE contract_id=$1 AND installment='signing'`, [id])).rows[0];
-      const lines = (await query<{ service_label: string; hours_per_month: number; monthly_price_cents: string }>(`SELECT service_label,hours_per_month,monthly_price_cents::text FROM contract_line_items WHERE contract_id=$1`, [id])).rows;
+      const lines = (await query<{ service_label: string; hours_per_month: number; weeks_per_month: number | null; days_per_week: number | null; monthly_price_cents: string }>(`SELECT service_label,hours_per_month,weeks_per_month,days_per_week,monthly_price_cents::text FROM contract_line_items WHERE contract_id=$1`, [id])).rows;
       await mail(`contract-sent:${id}`, ct.contact_email, `Your contract ${ct.reference} and the signing invoice`, [salutation,
         `We have approved your request. The contract terms are below, with the first invoice: 50% on signing, before work starts. 25% follows at the contract midpoint and the final 25% at the end.`,
         `To accept, reply to this email confirming the contract, or send back a signed copy, and pay the signing invoice. We start on the agreed date once both are received.`,
         `للموافقة، يرجى الرد على هذا البريد بتأكيد الاتفاقية أو إرسال نسخة موقعة، وسداد فاتورة التوقيع. نبدأ في التاريخ المتفق عليه بعد استلامهما.`],
-        [["Contract", ct.reference], ["Company", ct.company_name], ...lines.map(l => [l.service_label, `${l.hours_per_month} h/month · ${usd(l.monthly_price_cents)} / month`] as [string, string]),
+        [["Contract", ct.reference], ["Company", ct.company_name], ...lines.map(l => [l.service_label, `${workload(l.weeks_per_month, l.days_per_week, l.hours_per_month)} · ${usd(l.monthly_price_cents)} / month`] as [string, string]),
          ["Support", ct.support_type === "onsite" ? "Onsite" : "Remote"], ["Duration", `${ct.duration_months} months from ${ct.rsd}`], ["Contract total", usd(ct.total_cents)],
          ["Invoice", inv.reference], ["Amount due now (50%)", usd(inv.amount_cents)], ["Payment terms", `${terms.paymentTermsDays} days`]]);
     } else if (input.action === "reject") await mail(`contract-rejected:${id}`, ct.contact_email, `About your contract request ${ct.reference}`, [salutation, `We are unable to proceed with this request.`, `Reason: ${r.out.reason}`]);

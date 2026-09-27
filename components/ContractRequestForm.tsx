@@ -3,7 +3,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useLocale, useT } from "./I18n";
 import { Logo } from "./Logo";
-import { MAX_HOURS, MAX_MONTHS, quote, type PricingConfig } from "@/lib/pricing";
+import { MAX_MONTHS, quote, withWorkPattern, type PricingConfig } from "@/lib/pricing";
 
 const AR: Record<string, string> = { consultant: "مستشار", it_support: "أخصائي دعم تقني", devops: "DevOps", cybersecurity: "الأمن السيبراني" };
 const usd = (c: bigint) => `USD ${(c / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${(c % 100n).toString().padStart(2, "0")}`;
@@ -13,16 +13,18 @@ const setCookie = (k: string, v: string) => { document.cookie = `${k}=${v}; path
 export function ContractRequestForm({ pricing, minDate }: { pricing: PricingConfig; minDate: string }) {
   const t = useT(), locale = useLocale(), router = useRouter();
   const keys = Object.keys(pricing.services), label = (k: string) => locale === "ar" ? AR[k] ?? pricing.services[k].label : pricing.services[k].label;
-  const [lines, setLines] = useState([{ service: keys[0], hours: "80" }]);
+  const full = withWorkPattern(pricing), range = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
+  const [lines, setLines] = useState([{ service: keys[0], weeks: String(full.weeksPerMonth), days: String(full.daysPerWeek) }]);
+  const wire = () => lines.map(l => ({ service: l.service, weeksPerMonth: Number(l.weeks), daysPerWeek: Number(l.days) }));
   const [f, setF] = useState({ companyName: "", contactName: "", contactEmail: "", contactPhone: "", requirements: "", supportType: "remote" as "remote" | "onsite", requestedStartDate: minDate, durationMonths: "6", website: "" });
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [done, setDone] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
-  const q = useMemo(() => { try { return quote(pricing, { lines: lines.map(l => ({ service: l.service, hoursPerMonth: Number(l.hours) })), durationMonths: Number(f.durationMonths), supportType: f.supportType }); } catch { return null; } }, [pricing, lines, f.durationMonths, f.supportType]);
+  const q = useMemo(() => { try { return quote(pricing, { lines: wire(), durationMonths: Number(f.durationMonths), supportType: f.supportType }); } catch { return null; } }, [pricing, lines, f.durationMonths, f.supportType]);
   const unused = keys.filter(k => !lines.some(l => l.service === k));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(""); setBusy(true);
     try {
-      const r = await fetch("/api/contracts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, durationMonths: Number(f.durationMonths), lines: lines.map(l => ({ service: l.service, hoursPerMonth: Number(l.hours) })) }) });
+      const r = await fetch("/api/contracts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, durationMonths: Number(f.durationMonths), lines: wire() }) });
       const d = await r.json(); if (!r.ok) throw new Error(d.error || "Request failed"); setDone(d.reference);
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
   };
@@ -52,11 +54,14 @@ export function ContractRequestForm({ pricing, minDate }: { pricing: PricingConf
             <h2 id="cr-svc" style={{ fontSize: 17 }}>{t("cr.services")}</h2>
             {lines.map((l, i) => <div key={i} className="grid-3" style={{ alignItems: "end" }}>
               <div className="field"><label className="label" htmlFor={`cr-s${i}`}>{t("cr.service")}</label><select className="select" id={`cr-s${i}`} value={l.service} onChange={e => setLines(lines.map((x, j) => j === i ? { ...x, service: e.target.value } : x))}>{keys.filter(k => k === l.service || unused.includes(k)).map(k => <option key={k} value={k}>{label(k)}</option>)}</select></div>
-              <div className="field"><label className="label" htmlFor={`cr-h${i}`}>{t("cr.hours")}</label><input className="input mono" id={`cr-h${i}`} type="number" required min={1} max={MAX_HOURS} step={1} value={l.hours} onChange={e => setLines(lines.map((x, j) => j === i ? { ...x, hours: e.target.value } : x))} aria-describedby="cr-hh" /></div>
+              <div className="grid-2" style={{ gap: 12 }}>
+                <div className="field"><label className="label" htmlFor={`cr-w${i}`}>{t("cr.weeks")}</label><select className="select mono" id={`cr-w${i}`} value={l.weeks} onChange={e => setLines(lines.map((x, j) => j === i ? { ...x, weeks: e.target.value } : x))} aria-describedby="cr-hh">{range(full.weeksPerMonth).map(n => <option key={n} value={n}>{n}</option>)}</select></div>
+                <div className="field"><label className="label" htmlFor={`cr-d${i}`}>{t("cr.days")}</label><select className="select mono" id={`cr-d${i}`} value={l.days} onChange={e => setLines(lines.map((x, j) => j === i ? { ...x, days: e.target.value } : x))} aria-describedby="cr-hh">{range(full.daysPerWeek).map(n => <option key={n} value={n}>{n}</option>)}</select></div>
+              </div>
               <div>{lines.length > 1 && <button type="button" className="btn btn-small" onClick={() => setLines(lines.filter((_, j) => j !== i))}>{t("cr.remove")}</button>}</div>
             </div>)}
-            <span id="cr-hh" className="hint">{t("cr.hoursHint", { h: pricing.standardHours })}</span>
-            {unused.length > 0 && <div><button type="button" className="btn btn-outline btn-small" onClick={() => setLines([...lines, { service: unused[0], hours: "40" }])}>{t("cr.addService")}</button></div>}
+            <span id="cr-hh" className="hint">{t("cr.fullMonth", { w: full.weeksPerMonth, d: full.daysPerWeek, h: full.hoursPerDay, t: full.standardHours })}</span>
+            {unused.length > 0 && <div><button type="button" className="btn btn-outline btn-small" onClick={() => setLines([...lines, { service: unused[0], weeks: String(full.weeksPerMonth), days: String(full.daysPerWeek) }])}>{t("cr.addService")}</button></div>}
             <div className="field"><label className="label" htmlFor="cr-req">{t("cr.requirements")}</label><textarea className="textarea" id="cr-req" rows={5} required minLength={10} maxLength={4000} value={f.requirements} onChange={set("requirements")} /></div>
           </section>
           <section className="card card-pad" aria-labelledby="cr-terms">
@@ -73,7 +78,7 @@ export function ContractRequestForm({ pricing, minDate }: { pricing: PricingConf
           <h2 id="cr-price" style={{ fontSize: 17 }}>{t("cr.price")}</h2>
           {q ? <>
             <ul className="stack-s" style={{ listStyle: "none", margin: 0, padding: 0 }}>{q.lines.map(l => <li key={l.serviceKey} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 8 }}>
-              <strong>{label(l.serviceKey)}</strong> <span className="soft">· {l.hoursPerMonth} h</span><br />
+              <strong>{label(l.serviceKey)}</strong> <span className="soft">· {t("cr.lineLoad", { w: l.weeksPerMonth, d: l.daysPerWeek, h: l.hoursPerMonth })}</span><br />
               <span className="mono soft" dir="ltr" style={{ fontSize: 14 }}>{t("cr.perMonth", { amount: usd(l.monthlyPriceCents) })}</span><br />
               <span className="mono" dir="ltr" style={{ fontSize: 14 }}>{t("cr.lineTotal", { amount: usd(l.lineTotalCents), m: f.durationMonths })}</span></li>)}</ul>
             {q.onsitePremiumCents > 0n && <p className="soft">{t("cr.premium")}: <bdi className="mono" dir="ltr">{usd(q.onsitePremiumCents)}</bdi></p>}

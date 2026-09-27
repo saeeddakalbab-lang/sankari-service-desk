@@ -43,8 +43,8 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
       <section className="card card-pad stack" aria-labelledby="ct-lines">
         <h2 id="ct-lines" style={{ fontSize: 17 }}>{t("ct.lines")}</h2>
         <div className="table-wrap"><table className="table">
-          <thead><tr><th scope="col">{t("cr.service")}</th><th scope="col">{t("cr.hours")}</th><th scope="col">{t("ct.monthly")}</th><th scope="col">{t("ct.lineTotal")}</th></tr></thead>
-          <tbody>{d.lines.map(l => <tr key={l.service_key}><td>{l.service_label}</td><td className="mono">{l.hours_per_month}</td><td className="mono" dir="ltr" style={{ whiteSpace: "nowrap" }}>{usd(l.monthly_price_cents)}</td><td className="mono" dir="ltr" style={{ whiteSpace: "nowrap" }}>{usd(l.line_total_cents)}</td></tr>)}</tbody>
+          <thead><tr><th scope="col">{t("cr.service")}</th><th scope="col">{t("ct.load")}</th><th scope="col">{t("ct.monthly")}</th><th scope="col">{t("ct.lineTotal")}</th></tr></thead>
+          <tbody>{d.lines.map(l => <tr key={l.service_key}><td>{l.service_label}</td><td>{l.weeks_per_month ? t("cr.lineLoad", { w: l.weeks_per_month, d: l.days_per_week, h: l.hours_per_month }) : l.hours_per_month}</td><td className="mono" dir="ltr" style={{ whiteSpace: "nowrap" }}>{usd(l.monthly_price_cents)}</td><td className="mono" dir="ltr" style={{ whiteSpace: "nowrap" }}>{usd(l.line_total_cents)}</td></tr>)}</tbody>
         </table></div>
         <dl className="facts" style={{ gridTemplateColumns: "repeat(3,minmax(0,1fr))" }}>
           <div><dt>{t("ct.subtotal")}</dt><dd dir="ltr">{usd(c.subtotal_cents)}</dd></div>

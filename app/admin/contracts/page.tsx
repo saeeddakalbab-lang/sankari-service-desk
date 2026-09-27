@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ProtectedPage } from "@/components/ProtectedPage";
-import { listContracts, usd } from "@/lib/contracts";
+import { PriceList } from "@/components/PriceList";
+import { getPricing, listContracts, usd } from "@/lib/contracts";
 import type { I18nKey } from "@/lib/i18n";
 import { fmtDate } from "@/lib/format";
 import { getViewer } from "@/lib/view";
@@ -10,7 +11,7 @@ const tone: Record<string, string> = { submitted: "gold", under_review: "gold", 
 export default async function ContractsPage() {
   const { user, t } = await getViewer();
   if (!user || !(user.roles.includes("admin") || user.roles.includes("accountant"))) return <ProtectedPage roles={["admin", "accountant"]}><></></ProtectedPage>;
-  const rows = await listContracts();
+  const [rows, pricing] = await Promise.all([listContracts(), getPricing()]);
   return <ProtectedPage roles={["admin", "accountant"]}>
     <div className="stack">
       <div className="row" style={{ justifyContent: "space-between", alignItems: "end" }}>
@@ -31,6 +32,7 @@ export default async function ContractsPage() {
           </tr>)}</tbody>
         </table></div> : <p className="card-pad soft">{t("ct.none")}</p>}
       </section>
+      <PriceList pricing={JSON.parse(JSON.stringify(pricing))} canEdit={user.roles.includes("admin")} />
     </div>
   </ProtectedPage>;
 }

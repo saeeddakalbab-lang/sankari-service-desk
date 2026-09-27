@@ -365,3 +365,15 @@ OpsHub data already sits in these tables, since the new guards apply to any late
 
 The public form is at `https://it-portal.sankari-holding.com/contract-request`. It needs no sign-in;
 it is rate-limited and has a hidden field that catches bots.
+
+# Step L: contracts priced by weeks on site, and the price list (migration 014)
+
+Same routine: dump with `STEP=014`, then deploy. The app applies it on start.
+
+| Migration | What it does | Rollback |
+|---|---|---|
+| `014_contract_weeks.sql` | Adds nullable `weeks_per_month` (1-4) and `days_per_week` (1-7) to `contract_line_items`. A line is priced on weeks × days × 8 hours against a full month of 4 × 6 × 8 = 192 hours, so two weeks a month costs half. `hours_per_month` keeps the product. No existing row changes. | `db/rollback/014_contract_weeks.down.sql`: refuses once any line was priced by weeks. |
+
+After deploy, **Contracts → Price list** shows each service's base salary and what a full month, two
+weeks and one week cost: (base salary + flat cost) × multiplier. Admins can change the base salaries,
+the flat cost and the multiplier; each save is audited, and saved contracts keep their own figures.

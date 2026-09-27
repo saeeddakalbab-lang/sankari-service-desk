@@ -35,8 +35,8 @@ export default async function ContractPrint({ params, searchParams }: { params: 
       <tbody><tr><td dir="ltr">{inv.reference}</td><td>{t(`ct.inv.${inv.installment}` as "ct.inv.signing")} · {c.reference}</td><td dir="ltr">{inv.sent_at ? fmtDate(inv.sent_at) : inv.due_date || inv.due_trigger}</td><td dir="ltr">{usd(inv.amount_cents)}</td></tr>
         <tr className="print-total"><td /><td /><td>{t("ct.total")}</td><td dir="ltr">{usd(inv.amount_cents)}</td></tr></tbody></table>
     : <>
-      <table className="print-table"><thead><tr><th>{t("cr.service")}</th><th>{t("cr.hours")}</th><th>{t("ct.monthly")}</th><th>{t("ct.lineTotal")}</th></tr></thead>
-        <tbody>{d.lines.map(l => <tr key={l.service_key}><td>{l.service_label}</td><td dir="ltr">{l.hours_per_month}</td><td dir="ltr">{usd(l.monthly_price_cents)}</td><td dir="ltr">{usd(l.line_total_cents)}</td></tr>)}
+      <table className="print-table"><thead><tr><th>{t("cr.service")}</th><th>{t("ct.load")}</th><th>{t("ct.monthly")}</th><th>{t("ct.lineTotal")}</th></tr></thead>
+        <tbody>{d.lines.map(l => <tr key={l.service_key}><td>{l.service_label}</td><td>{l.weeks_per_month ? t("cr.lineLoad", { w: l.weeks_per_month, d: l.days_per_week, h: l.hours_per_month }) : l.hours_per_month}</td><td dir="ltr">{usd(l.monthly_price_cents)}</td><td dir="ltr">{usd(l.line_total_cents)}</td></tr>)}
           {BigInt(c.onsite_premium_cents) > 0n && <tr><td>{t("ct.premium")}</td><td /><td /><td dir="ltr">{usd(c.onsite_premium_cents)}</td></tr>}
           <tr className="print-total"><td>{t("ct.total")}</td><td /><td /><td dir="ltr">{usd(c.total_cents)}</td></tr></tbody></table>
       <h2 style={{ fontSize: 15, margin: "20px 0 8px" }}>{t("ct.invoices")}</h2>

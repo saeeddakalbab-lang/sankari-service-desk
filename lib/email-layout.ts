@@ -20,10 +20,16 @@ export function rowsTable(rows: [string, string][], rtl = false) {
   const side = rtl ? "right" : "left", pad = rtl ? "7px 0 7px 12px" : "7px 12px 7px 0";
   return rows.length ? `<table role="presentation" dir="${rtl ? "rtl" : "ltr"}" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;font-family:${FONT};font-size:14px;margin:8px 0 4px">${rows.map(([k, v]) => `<tr><th scope="row" align="${side}" valign="top" width="38%" style="text-align:${side};padding:${pad};color:#5E564D;font-weight:normal;border-bottom:1px solid #EFEBE5">${esc(k)}</th><td align="${side}" valign="top" style="padding:7px 0;text-align:${side};color:#2B2622;border-bottom:1px solid #EFEBE5" dir="auto">${esc(v)}</td></tr>`).join("")}</table>` : "";
 }
-// A button Outlook draws correctly: the colour sits on a table cell, not only on the link.
+// A button Outlook draws correctly. Outlook ignores padding on a link, so the size and colour sit on
+// the table cell (which it honours) and the link only carries the text. Corners round everywhere
+// except Outlook on Windows, where the button stays a clean rectangle.
 export function button(href: string, label: string, tone: "primary" | "outline-bad" = "primary") {
-  const primary = tone === "primary";
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-table;border-collapse:separate;margin:0 6px 6px 0"><tr><td align="center" bgcolor="${primary ? "#B84F27" : "#FFFFFF"}" style="border-radius:6px;background:${primary ? "#B84F27" : "#FFFFFF"};${primary ? "" : "border:2px solid #AE352A;"}"><a href="${esc(href)}" target="_blank" style="display:inline-block;padding:${primary ? "12px 22px" : "10px 20px"};font-family:${FONT};font-size:15px;font-weight:bold;color:${primary ? "#FFFFFF" : "#AE352A"};text-decoration:none;border-radius:6px">${esc(label)}</a></td></tr></table>`;
+  const primary = tone === "primary", bg = primary ? "#B84F27" : "#FFFFFF", ink = primary ? "#FFFFFF" : "#AE352A";
+  const pad = primary ? "13px 26px" : "11px 24px", border = primary ? `border:2px solid ${bg};` : "border:2px solid #AE352A;";
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="display:inline-table;border-collapse:separate;margin:0 8px 8px 0;mso-table-lspace:0;mso-table-rspace:0">`
+    + `<tr><td align="center" valign="middle" bgcolor="${bg}" height="46" style="background:${bg};${border}border-radius:8px;padding:${pad};mso-padding-alt:${pad};height:46px;box-sizing:border-box">`
+    + `<a href="${esc(href)}" target="_blank" style="display:inline-block;font-family:${FONT};font-size:15px;line-height:20px;font-weight:bold;color:${ink};text-decoration:none;white-space:nowrap;mso-line-height-rule:exactly">${esc(label)}</a>`
+    + `</td></tr></table>`;
 }
 
 // A shaded box: a one-cell table, so the background survives Outlook.

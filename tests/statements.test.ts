@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextMonth, periodEndExclusive, periodLastDay, periodStart, prevMonth, statementMonthDue } from "../lib/statements";
+import { nextMonth, periodEndExclusive, periodLastDay, periodStart, prevMonth, statementMonthDue, statementMonthFor } from "../lib/statements";
 import { buildXlsx } from "../lib/xlsx";
 
 describe("statement schedule (Europe/Istanbul, UTC+3)", () => {
@@ -23,6 +23,11 @@ describe("statement cycle day", () => {
     expect([periodStart("2026-09", 16), periodLastDay("2026-09", 16)]).toEqual(["2026-08-16", "2026-09-15"]);
     expect([periodStart("2027-01", 16), periodLastDay("2027-01", 16)]).toEqual(["2026-12-16", "2027-01-15"]);
     expect(periodEndExclusive("2026-09", 16)).toBe(periodStart("2026-10", 16));   // no gap, no overlap
+  });
+  it("puts each date in the statement that covers it", () => {
+    expect(["2026-09-15", "2026-09-16", "2026-12-20", "2026-09-01"].map(d => statementMonthFor(d, 16))).toEqual(["2026-09", "2026-10", "2027-01", "2026-09"]);
+    expect(statementMonthFor("2026-09-30", 1)).toBe("2026-09");
+    for (const d of ["2026-08-16", "2026-09-15"]) expect(statementMonthFor(d, 16)).toBe("2026-09");   // both ends of the Sep period
   });
   it("is prepared the morning after the cycle closes", () => {
     expect(statementMonthDue(new Date("2026-09-16T02:59:00Z"), 16)).toBeNull();      // 05:59 on the 16th: wait until 06:00

@@ -8,7 +8,7 @@ import { formatMoney,parseAmountToCents,usdToAedCents } from "@/lib/money";
 import type { Priority } from "@/lib/types";
 
 export type FormKind="helpdesk"|"email"|"subscription";
-const COMPANIES=["Sankari Holding","Electro Taxi","Five Oceans","Arcaden","Al-Majd Foundation","Domainz","77Auto","Mall of Aleppo","East West","Electro Cafe"];
+import { COMPANIES } from "@/lib/companies";
 const TYPE={helpdesk:"helpdesk_ticket",email:"email_account_request",subscription:"subscription_approval"} as const;
 type Chain={approvalRequired:boolean;steps:{approverName:string;approverRole:"manager"|"ceo"}[]}|{error:string}|null;
 const slug=(name:string)=>name.normalize("NFKD").replace(/[̀-ͯ]/g,"").toLowerCase().trim().replace(/[^a-z0-9]+/g,".").replace(/^\.+|\.+$/g,"").slice(0,64);

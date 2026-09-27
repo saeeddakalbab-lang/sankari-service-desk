@@ -390,3 +390,15 @@ On a contract that is submitted or under review, **Discount or profit** sets a p
 a discount is printed on the contract as its own line and lowers the total; a profit raises each
 service's monthly price and never appears on anything the client sees. The price list moved to
 **Admin settings → Price list**; the Contracts page shows it read-only.
+
+# Step N: correcting statement lines, and the person and company on payments (migration 016)
+
+Same routine: dump with `STEP=016`, then deploy.
+
+| Migration | What it does | Rollback |
+|---|---|---|
+| `016_statement_edits.sql` | Adds `beneficiary`, `company_name`, `locked_at` and `updated_at` to `statement_credits`, and `locked_at` to `subscription_bills`. Replaces both guards: nothing can be deleted; an unlocked payment or refund can be edited; an unlocked bill can change only its beneficiary and company. Sending a statement stamps `locked_at` on every line of its period. No existing row changes. | `db/rollback/016_statement_edits.down.sql`: refuses once any payment carries a person or company, or any line is locked. |
+
+On **Accounting statement**, each line has **Edit** until that statement is sent; every edit is audited
+old -> new. **Record a card payment or refund** now asks for the person (from People, or typed) and
+the company, and the two breakdowns show charges, payments and the net per person and per company.

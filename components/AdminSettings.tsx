@@ -11,7 +11,7 @@ import type { Role,Theme } from "@/lib/types";
 type U={id:string;name:string;email:string;roles:Role[];manager_user_id:string|null;disabled_at:string|null;invited_at?:string|null;email_verified?:string|null};
 const TYPES=["employee","manager","ceo","owner","board","admin","agent"] as const;
 const PRESETS=[["Terracotta","#B84F27"],["Teal","#1D5F70"],["Green","#20744F"],["Blue","#2C5C8F"]] as const;
-const BASIC:Role[]=["employee","manager","agent","admin","dev","accountant"];
+const BASIC:Role[]=["employee","manager","agent","admin","dev","accountant","contracts"];
 
 async function send(url:string,method:string,body:unknown){const r=await fetch(url,{method,headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||"Request failed");return d;}
 

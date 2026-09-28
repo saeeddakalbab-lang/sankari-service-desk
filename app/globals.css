@@ -376,3 +376,4 @@ dl.hbars dt{font-size:14px}dl.hbars dd{margin:0}
 .jchart .jpct{text-align:end;font-weight:600}
 @media (max-width:640px){.jchart li{grid-template-columns:1fr 52px}.jchart .jname{grid-column:1 / -1}}
 .jbest{display:flex;flex-wrap:wrap;align-items:center;gap:12px;background:var(--good-soft);border-block:1px solid var(--line)}
+.rc-group{border-top:1px solid var(--line);padding:14px 20px}.rc-head{margin-bottom:8px;gap:10px}

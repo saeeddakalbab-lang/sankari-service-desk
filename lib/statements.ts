@@ -7,8 +7,8 @@ import { buildXlsx, type Cell } from "./xlsx";
 
 // The monthly subscriptions statement for accounting. It reconciles in AED, the currency the card is
 // billed in: opening balance + charges (subscription bills) - credits (card payments and refunds) =
-// closing. Every charge carries its beneficiary and company. The statement is generated from the
-// append-only bill and credit tables, so regenerating a month gives the same lines.
+// closing. Every line carries its beneficiary, department and company. A wrong line can be corrected
+// or deleted until the statement covering it is sent; after that it is fixed (migration 020).
 
 export const accountingSchema = z.object({
   recipientEmail: z.string().trim().toLowerCase().email().max(254).or(z.literal("")),
@@ -34,10 +34,10 @@ export const periodStart = (m: string, cycleDay: number) => cycleDay <= 1 ? `${m
 export const periodEndExclusive = (m: string, cycleDay: number) => periodStart(nextMonth(m), cycleDay);
 export const periodLastDay = (m: string, cycleDay: number) => { const d = new Date(`${periodEndExclusive(m, cycleDay)}T00:00:00Z`); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 
-export type StatementLine = { id: string; date: string; kind: "charge" | "payment" | "refund"; reference: string; service: string; description: string; beneficiary: string; company: string; original: string; debitAedCents: string; creditAedCents: string; approvedBy: string; locked: boolean };
+export type StatementLine = { id: string; date: string; kind: "charge" | "payment" | "refund"; reference: string; service: string; description: string; beneficiary: string; department: string; company: string; original: string; debitAedCents: string; creditAedCents: string; approvedBy: string; locked: boolean };
 export type Breakdown = { name: string; aedCents: string; creditsAedCents: string; count: number };
 export type Statement = { month: string; periodStart: string; periodEnd: string; openingAedCents: string; chargesAedCents: string; creditsAedCents: string; closingAedCents: string; lines: StatementLine[];
-  byBeneficiary: Breakdown[]; byCompany: Breakdown[];
+  byBeneficiary: Breakdown[]; byDepartment: Breakdown[]; byCompany: Breakdown[];
   stored: { generatedAt: string; sentAt: string | null; sentBy: string | null; emailState: string | null; recipient: string | null } | null; accounting: Accounting };
 
 const dec = (c: bigint | string) => { const v = BigInt(c), neg = v < 0n, a = neg ? -v : v; return `${neg ? "-" : ""}${a / 100n}.${(a % 100n).toString().padStart(2, "0")}`; };
@@ -54,17 +54,17 @@ export async function buildStatement(month: string): Promise<Statement> {
       (SELECT coalesce(sum(amount_aed_cents),0)::text FROM subscription_bills WHERE billed_on >= $1::date AND billed_on < $2::date) charges,
       (SELECT coalesce(sum(amount_aed_cents),0)::text FROM statement_credits WHERE occurred_on >= $1::date AND occurred_on < $2::date) credits`, [periodStart(acc.openingMonth, cd), from])).rows[0];
   const opening = BigInt(acc.openingBalanceAedCents) + BigInt(before.charges) - BigInt(before.credits);
-  const bills = (await query<{ billed_on: string; id: string; tool: string; beneficiary: string; company_name: string; amount_cents: string; currency: string; amount_aed_cents: string; approved_by: string | null; request_id: string | null; locked: boolean }>(
-    `SELECT to_char(b.billed_on,'YYYY-MM-DD') billed_on,b.id,b.tool,coalesce(nullif(b.beneficiary,''),s.beneficiary,'') beneficiary,b.company_name,b.amount_cents::text,b.currency,b.amount_aed_cents::text,coalesce(u.name,CASE WHEN b.kind='phone' THEN 'Phone: '||b.phone_approved_by END) approved_by,b.request_id,b.locked_at IS NOT NULL locked
+  const bills = (await query<{ billed_on: string; id: string; tool: string; beneficiary: string; department: string; company_name: string; amount_cents: string; currency: string; amount_aed_cents: string; approved_by: string | null; request_id: string | null; locked: boolean }>(
+    `SELECT to_char(b.billed_on,'YYYY-MM-DD') billed_on,b.id,b.tool,coalesce(nullif(b.beneficiary,''),s.beneficiary,'') beneficiary,coalesce(s.department,'') department,b.company_name,b.amount_cents::text,b.currency,b.amount_aed_cents::text,coalesce(u.name,CASE WHEN b.kind='phone' THEN 'Phone: '||b.phone_approved_by END) approved_by,b.request_id,b.locked_at IS NOT NULL locked
        FROM subscription_bills b JOIN subscriptions s ON s.id=b.subscription_id LEFT JOIN users u ON u.id=b.approved_by_user_id
       WHERE b.billed_on >= $1::date AND b.billed_on < $2::date ORDER BY b.billed_on, b.created_at`, [from, to])).rows;
-  const credits = (await query<{ occurred_on: string; id: string; kind: "payment" | "refund"; amount_aed_cents: string; description: string; beneficiary: string; company_name: string; locked: boolean }>(
-    `SELECT to_char(occurred_on,'YYYY-MM-DD') occurred_on,id,kind,amount_aed_cents::text,description,beneficiary,company_name,locked_at IS NOT NULL locked FROM statement_credits WHERE occurred_on >= $1::date AND occurred_on < $2::date ORDER BY occurred_on, created_at`,
+  const credits = (await query<{ occurred_on: string; id: string; kind: "payment" | "refund"; amount_aed_cents: string; description: string; beneficiary: string; department: string; company_name: string; locked: boolean }>(
+    `SELECT to_char(occurred_on,'YYYY-MM-DD') occurred_on,id,kind,amount_aed_cents::text,description,beneficiary,department,company_name,locked_at IS NOT NULL locked FROM statement_credits WHERE occurred_on >= $1::date AND occurred_on < $2::date ORDER BY occurred_on, created_at`,
     [from, to])).rows;
   const lines: StatementLine[] = [
-    ...bills.map(b => ({ id: b.id, date: b.billed_on, kind: "charge" as const, reference: `BILL-${b.id.slice(0, 8).toUpperCase()}`, service: b.tool, description: "", beneficiary: b.beneficiary || "—", company: b.company_name || "—",
+    ...bills.map(b => ({ id: b.id, date: b.billed_on, kind: "charge" as const, reference: `BILL-${b.id.slice(0, 8).toUpperCase()}`, service: b.tool, description: "", beneficiary: b.beneficiary || "—", department: b.department || "—", company: b.company_name || "—",
       original: `${b.currency} ${dec(b.amount_cents)}`, debitAedCents: b.amount_aed_cents, creditAedCents: "0", approvedBy: b.approved_by || "—", locked: b.locked })),
-    ...credits.map(c => ({ id: c.id, date: c.occurred_on, kind: c.kind, reference: `CR-${c.id.slice(0, 8).toUpperCase()}`, service: c.description || (c.kind === "payment" ? "Card payment" : "Refund"), description: c.description, beneficiary: c.beneficiary || "—", company: c.company_name || "—",
+    ...credits.map(c => ({ id: c.id, date: c.occurred_on, kind: c.kind, reference: `CR-${c.id.slice(0, 8).toUpperCase()}`, service: c.description || (c.kind === "payment" ? "Card payment" : "Refund"), description: c.description, beneficiary: c.beneficiary || "—", department: c.department || "—", company: c.company_name || "—",
       original: `AED ${dec(c.amount_aed_cents)}`, debitAedCents: "0", creditAedCents: c.amount_aed_cents, approvedBy: "—", locked: c.locked })),
   ].sort((a, b) => a.date.localeCompare(b.date));
   const charges = bills.reduce((s, b) => s + BigInt(b.amount_aed_cents), 0n), creditSum = credits.reduce((s, c) => s + BigInt(c.amount_aed_cents), 0n);
@@ -74,22 +74,23 @@ export async function buildStatement(month: string): Promise<Statement> {
   const st = (await query<{ generated_at: string; sent_at: string | null; sent_by: string | null; state: string | null; recipient: string | null }>(
     `SELECT m.generated_at,m.sent_at,u.name sent_by,o.state,o.recipient FROM monthly_statements m LEFT JOIN users u ON u.id=m.sent_by_user_id LEFT JOIN email_outbox o ON o.id=m.email_outbox_id WHERE m.month=$1::date`, [firstDay(month)])).rows[0];
   return { month, periodStart: from, periodEnd: periodLastDay(month, cd), openingAedCents: opening.toString(), chargesAedCents: charges.toString(), creditsAedCents: creditSum.toString(), closingAedCents: (opening + charges - creditSum).toString(), lines,
-    byBeneficiary: group(l => l.beneficiary), byCompany: group(l => l.company),
+    byBeneficiary: group(l => l.beneficiary), byDepartment: group(l => l.department), byCompany: group(l => l.company),
     stored: st ? { generatedAt: st.generated_at, sentAt: st.sent_at, sentBy: st.sent_by, emailState: st.state, recipient: st.recipient } : null, accounting: acc };
 }
 
 // Excel workbook: the statement (right-to-left, Arabic headers), then the two breakdowns.
 export function statementXlsx(s: Statement) {
   const n = (c: string) => Number(dec(c));
-  const head: Cell[] = ["التاريخ", "المرجع", "الخدمة", "المستفيد", "الشركة", "المبلغ الأصلي", "مدين (درهم)", "دائن (درهم)", "الرصيد (درهم)", "اعتمده"];
+  const head: Cell[] = ["التاريخ", "المرجع", "الخدمة", "المستفيد", "القسم", "الشركة", "المبلغ الأصلي", "مدين (درهم)", "دائن (درهم)", "الرصيد (درهم)", "اعتمده"];
   let bal = BigInt(s.openingAedCents);
-  const rows: Cell[][] = [head, [s.periodStart, "", "الرصيد الافتتاحي", "", "", "", null, null, n(s.openingAedCents), ""],
-    ...s.lines.map(l => { bal += BigInt(l.debitAedCents) - BigInt(l.creditAedCents); return [l.date, l.reference, l.service, l.beneficiary, l.company, l.original, l.debitAedCents === "0" ? null : n(l.debitAedCents), l.creditAedCents === "0" ? null : n(l.creditAedCents), n(bal.toString()), l.approvedBy] as Cell[]; }),
-    ["", "", "الرصيد الختامي", "", "", "", n(s.chargesAedCents), n(s.creditsAedCents), n(s.closingAedCents), ""]];
+  const rows: Cell[][] = [head, [s.periodStart, "", "الرصيد الافتتاحي", "", "", "", "", null, null, n(s.openingAedCents), ""],
+    ...s.lines.map(l => { bal += BigInt(l.debitAedCents) - BigInt(l.creditAedCents); return [l.date, l.reference, l.service, l.beneficiary, l.department, l.company, l.original, l.debitAedCents === "0" ? null : n(l.debitAedCents), l.creditAedCents === "0" ? null : n(l.creditAedCents), n(bal.toString()), l.approvedBy] as Cell[]; }),
+    ["", "", "الرصيد الختامي", "", "", "", "", n(s.chargesAedCents), n(s.creditsAedCents), n(s.closingAedCents), ""]];
   const breakdown = (title: string, g: Statement["byBeneficiary"]): Cell[][] => [[title, "عدد الحركات", "المصروفات (درهم)", "الدفعات والاستردادات (درهم)", "الصافي (درهم)"], ...g.map(x => [x.name, x.count, n(x.aedCents), n(x.creditsAedCents), n((BigInt(x.aedCents) - BigInt(x.creditsAedCents)).toString())] as Cell[])];
   return buildXlsx([
-    { name: `كشف ${s.month}`, rtl: true, rows, widths: [12, 16, 40, 28, 18, 16, 14, 14, 14, 18] },
+    { name: `كشف ${s.month}`, rtl: true, rows, widths: [12, 16, 40, 28, 22, 18, 16, 14, 14, 14, 18] },
     { name: "حسب المستفيد", rtl: true, rows: breakdown("المستفيد", s.byBeneficiary), widths: [36, 12, 16, 22, 16] },
+    { name: "حسب القسم", rtl: true, rows: breakdown("القسم", s.byDepartment), widths: [36, 12, 16, 22, 16] },
     { name: "حسب الشركة", rtl: true, rows: breakdown("الشركة", s.byCompany), widths: [36, 12, 16, 22, 16] },
   ]);
 }
@@ -140,11 +141,11 @@ export async function sendStatement(month: string, userId: string, ipHash: strin
   });
 }
 
-export const creditSchema = z.object({ occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), kind: z.enum(["payment", "refund"]), amount: z.string().trim().regex(/^\d{1,12}(\.\d{1,2})?$/, "Amount: up to 2 decimals"), description: z.string().trim().max(300).default(""), beneficiary: z.string().trim().max(160).default(""), companyName: z.string().trim().max(160).default("") });
+export const creditSchema = z.object({ occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), kind: z.enum(["payment", "refund"]), amount: z.string().trim().regex(/^\d{1,12}(\.\d{1,2})?$/, "Amount: up to 2 decimals"), description: z.string().trim().max(300).default(""), beneficiary: z.string().trim().max(160).default(""), department: z.string().trim().max(120).default(""), companyName: z.string().trim().max(160).default("") });
 export async function addCredit(input: z.infer<typeof creditSchema>, userId: string, ipHash: string) {
   const [w, f = ""] = input.amount.split("."), cents = BigInt(w) * 100n + BigInt(f.padEnd(2, "0"));
   if (cents <= 0n) throw new AppError("Amount must be more than zero");
-  const r = (await query<{ id: string }>(`INSERT INTO statement_credits(occurred_on,kind,amount_aed_cents,description,beneficiary,company_name,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id`, [input.occurredOn, input.kind, cents.toString(), input.description, input.beneficiary, input.companyName, userId])).rows[0];
+  const r = (await query<{ id: string }>(`INSERT INTO statement_credits(occurred_on,kind,amount_aed_cents,description,beneficiary,department,company_name,created_by_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [input.occurredOn, input.kind, cents.toString(), input.description, input.beneficiary, input.department, input.companyName, userId])).rows[0];
   await query(`INSERT INTO audit_log(actor_id,action,after_data,ip_hash) VALUES($1,'statement.credit_added',$2,$3)`, [userId, JSON.stringify({ id: r.id, ...input, amountAedCents: cents.toString() }), ipHash]);
   return r;
 }
@@ -166,14 +167,14 @@ export const lineEditSchema = z.discriminatedUnion("type", [
 export async function editLine(id: string, input: z.infer<typeof lineEditSchema>, userId: string, ipHash: string) {
   return transaction(async c => {
     if (input.type === "credit") {
-      const old = (await c.query<{ occurred_on: string; locked_at: string | null }>(`SELECT to_char(occurred_on,'YYYY-MM-DD') occurred_on,locked_at,kind,amount_aed_cents::text,description,beneficiary,company_name FROM statement_credits WHERE id=$1 FOR UPDATE`, [id])).rows[0];
+      const old = (await c.query<{ occurred_on: string; locked_at: string | null }>(`SELECT to_char(occurred_on,'YYYY-MM-DD') occurred_on,locked_at,kind,amount_aed_cents::text,description,beneficiary,department,company_name FROM statement_credits WHERE id=$1 FOR UPDATE`, [id])).rows[0];
       if (!old) throw new AppError("Line not found", 404);
       if (old.locked_at) throw new AppError("This line was sent to accounting and is fixed; add a correcting line instead", 409);
       await assertOpen(c, [old.occurred_on, input.occurredOn]);
       const [w, f = ""] = input.amount.split("."), cents = BigInt(w) * 100n + BigInt(f.padEnd(2, "0"));
       if (cents <= 0n) throw new AppError("Amount must be more than zero");
-      const next = { occurred_on: input.occurredOn, kind: input.kind, amount_aed_cents: cents.toString(), description: input.description, beneficiary: input.beneficiary, company_name: input.companyName };
-      await c.query(`UPDATE statement_credits SET occurred_on=$2,kind=$3,amount_aed_cents=$4,description=$5,beneficiary=$6,company_name=$7,updated_at=now() WHERE id=$1`, [id, next.occurred_on, next.kind, next.amount_aed_cents, next.description, next.beneficiary, next.company_name]);
+      const next = { occurred_on: input.occurredOn, kind: input.kind, amount_aed_cents: cents.toString(), description: input.description, beneficiary: input.beneficiary, department: input.department, company_name: input.companyName };
+      await c.query(`UPDATE statement_credits SET occurred_on=$2,kind=$3,amount_aed_cents=$4,description=$5,beneficiary=$6,department=$7,company_name=$8,updated_at=now() WHERE id=$1`, [id, next.occurred_on, next.kind, next.amount_aed_cents, next.description, next.beneficiary, next.department, next.company_name]);
       await c.query(`INSERT INTO audit_log(actor_id,action,before_data,after_data,ip_hash) VALUES($1,'statement.credit_edited',$2,$3,$4)`, [userId, JSON.stringify({ id, ...old }), JSON.stringify({ id, ...next }), ipHash]);
     } else {
       const old = (await c.query<{ billed_on: string; locked_at: string | null }>(`SELECT to_char(billed_on,'YYYY-MM-DD') billed_on,locked_at,beneficiary,company_name FROM subscription_bills WHERE id=$1 FOR UPDATE`, [id])).rows[0];
@@ -184,6 +185,22 @@ export async function editLine(id: string, input: z.infer<typeof lineEditSchema>
       await c.query(`INSERT INTO audit_log(actor_id,action,before_data,after_data,ip_hash) VALUES($1,'statement.charge_edited',$2,$3,$4)`, [userId, JSON.stringify({ id, ...old }), JSON.stringify({ id, beneficiary: input.beneficiary, company_name: input.companyName }), ipHash]);
     }
     return { id, saved: true };
+  });
+}
+
+// A wrong line goes, until the statement covering it is sent (the database refuses after that). The
+// whole row is kept in the audit log first. A charge's subscription stays; only the charge goes.
+export const lineDeleteSchema = z.object({ type: z.enum(["credit", "charge"]), reason: z.string().trim().min(3).max(500) });
+export async function deleteLine(id: string, input: z.infer<typeof lineDeleteSchema>, userId: string, ipHash: string) {
+  return transaction(async c => {
+    const table = input.type === "credit" ? "statement_credits" : "subscription_bills", dateCol = input.type === "credit" ? "occurred_on" : "billed_on";
+    const old = (await c.query(`SELECT *,to_char(${dateCol},'YYYY-MM-DD') line_date FROM ${table} WHERE id=$1 FOR UPDATE`, [id])).rows[0];
+    if (!old) throw new AppError("Line not found", 404);
+    if (old.locked_at) throw new AppError("This line was sent to accounting and is fixed; add a correcting line instead", 409);
+    await assertOpen(c, [old.line_date]);
+    await c.query(`INSERT INTO audit_log(actor_id,action,before_data,after_data,ip_hash) VALUES($1,$2,$3,$4,$5)`, [userId, input.type === "credit" ? "statement.credit_deleted" : "statement.charge_deleted", JSON.stringify(old), JSON.stringify({ id, reason: input.reason }), ipHash]);
+    await c.query(`DELETE FROM ${table} WHERE id=$1`, [id]);
+    return { id, deleted: true };
   });
 }
 

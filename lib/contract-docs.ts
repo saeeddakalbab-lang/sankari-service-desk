@@ -29,6 +29,23 @@ export async function contractDocument(id: string) {
   return { doc, detail: d, party, terms };
 }
 
+// The quotation the client accepts before any contract: services and load, monthly and total price,
+// any discount, the payment plan. Same saved figures as the contract that follows.
+export async function quoteDocument(id: string) {
+  const x = await contractDocument(id);
+  if (!x) return null;
+  const c = x.detail.contract as Record<string, any>, t = x.terms;
+  return {
+    party: x.party, reference: c.reference, company: (c.client_details?.legalName as string) || c.company_name, contact: c.contact_name, email: c.contact_email,
+    date: ymd(c.quote_sent_at ? new Date(c.quote_sent_at) : new Date()), status: c.status as string, decidedAt: c.quote_decided_at ? ymd(new Date(c.quote_decided_at)) : null, note: (c.quote_note as string) ?? "",
+    months: c.duration_months as number, start: c.requested_start_date as string, supportType: c.support_type as string,
+    lines: x.detail.lines.map(l => ({ ar: serviceFor(l.service_key).name, en: l.service_label as string, hours: l.hours_per_month as number, weeks: l.weeks_per_month as number | null, days: l.days_per_week as number | null, monthlyCents: BigInt(l.monthly_price_cents), totalCents: BigInt(l.line_total_cents) })),
+    premiumCents: BigInt(c.onsite_premium_cents), subtotalCents: BigInt(c.subtotal_cents) + BigInt(c.onsite_premium_cents), discountCents: BigInt(c.discount_cents ?? 0), discountBps: Number(c.adjustment_bps ?? 0), totalCents: BigInt(c.total_cents),
+    words: usdInArabicWords(c.total_cents), plan: [t.signingBps, t.midpointBps, t.finalBps], requirements: c.requirements as string,
+  };
+}
+export type QuoteDoc = NonNullable<Awaited<ReturnType<typeof quoteDocument>>>;
+
 const INST_AR: Record<string, string> = { signing: "دفعة التوقيع", midpoint: "دفعة منتصف المدة", final: "الدفعة الختامية" };
 const INST_EN: Record<string, string> = { signing: "Signing installment", midpoint: "Midpoint installment", final: "Final installment" };
 export async function invoiceDocument(id: string, invoiceId: string) {

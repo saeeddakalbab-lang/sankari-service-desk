@@ -12,10 +12,11 @@ const dec = (c: string) => { const v = BigInt(c); return `${v / 100n}.${(v % 100
 const tone: Record<string, string> = { pending: "neutral", sent: "gold", paid: "good", overdue: "bad", void: "neutral" };
 
 // One contract: terms, the three invoices, the next step, team cost and history.
-export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; today: string }) {
+// manage: the contract steps (admin, Contracts role). finance: invoices and payments (admin, accountant).
+export function ContractAdmin({ d, admin, manage, finance, today }: { d: Detail; admin: boolean; manage: boolean; finance: boolean; today: string }) {
   const t = useT(), router = useRouter(), c = d.contract;
   const [busy, setBusy] = useState(false), [msg, setMsg] = useState<{ area: string; ok: boolean; text: string } | null>(null);
-  const [reason, setReason] = useState(""), [evidence, setEvidence] = useState(""), [start, setStart] = useState(c.requested_start_date > today ? c.requested_start_date : today), [mode, setMode] = useState<"" | "reject" | "cancel">("");
+  const [reason, setReason] = useState(""), [evidence, setEvidence] = useState(""), [start, setStart] = useState(c.requested_start_date > today ? c.requested_start_date : today), [mode, setMode] = useState<"" | "reject" | "cancel" | "delete">("");
   const [adjKind, setAdjKind] = useState<"none" | "discount" | "markup">(c.adjustment_kind ?? "none"), [adjPct, setAdjPct] = useState(c.adjustment_bps ? String(Number(c.adjustment_bps) / 100) : "");
   const [paid, setPaid] = useState<Record<string, { on: string; amount: string }>>({});
   const [staff, setStaff] = useState({ staffName: "", serviceKey: d.lines[0]?.service_key ?? "", monthlyCost: "", startedOn: c.start_date ?? today });
@@ -37,7 +38,7 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
         <h1>{c.company_name}</h1>
         <p><span className="pill info">{t(`ct.st.${s}` as I18nKey)}</span></p>
       </div>
-      <a className="btn" href={`/admin/contracts/${c.id}/print`} target="_blank" rel="noreferrer">{t("doc.contract")}</a>
+      <div className="row"><a className="btn" href={`/admin/contracts/${c.id}/print?quote=1`} target="_blank" rel="noreferrer">{t("doc.quote")}</a><a className="btn" href={`/admin/contracts/${c.id}/print`} target="_blank" rel="noreferrer">{t("doc.contract")}</a></div>
     </div>
 
     <div className="grid-2" style={{ alignItems: "start" }}>
@@ -54,7 +55,7 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
           <div><dt>{t("ct.total")}</dt><dd dir="ltr">{usd(c.total_cents)}</dd></div>
         </dl>
         {c.adjustment_kind === "markup" && c.list_total_cents && <p className="soft" style={{ fontSize: 13 }}>{t("adj.markupNote", { p: Number(c.adjustment_bps) / 100, list: usd(c.list_total_cents), profit: usd(String(BigInt(c.total_cents) - BigInt(c.list_total_cents))) })}</p>}
-        {admin && (s === "submitted" || s === "under_review") && <form className="stack-s" style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }} onSubmit={e => { e.preventDefault(); post("adj", `/api/admin/contracts/${c.id}`, { action: "adjust", kind: adjKind, percent: adjPct }); }}>
+        {manage && (s === "submitted" || s === "under_review") && <form className="stack-s" style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }} onSubmit={e => { e.preventDefault(); post("adj", `/api/admin/contracts/${c.id}`, { action: "adjust", kind: adjKind, percent: adjPct }); }}>
           <h3 style={{ fontSize: 15 }}>{t("adj.title")}</h3>
           <div className="grid-3" style={{ alignItems: "end" }}>
             <div className="field"><label className="label" htmlFor="adj-kind">{t("adj.kind")}</label><select className="select" id="adj-kind" value={adjKind} onChange={e => setAdjKind(e.target.value as typeof adjKind)}><option value="none">{t("adj.none")}</option><option value="discount">{t("adj.discount")}</option><option value="markup">{t("adj.markup")}</option></select></div>
@@ -82,13 +83,13 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
     {d.invoices.length > 0 && <section className="card" aria-labelledby="ct-inv">
       <div className="card-head"><h2 id="ct-inv">{t("ct.invoices")}</h2></div>
       <div className="table-wrap"><table className="table">
-        <thead><tr><th scope="col">{t("ct.ref")}</th><th scope="col">{t("ct.status")}</th><th scope="col">{t("ct.amount")}</th><th scope="col">{t("ct.due")}</th><th scope="col"><span className="sr-only">{t("ct.markPaid")}</span></th></tr></thead>
+        <thead><tr><th scope="col">{t("ct.ref")}</th><th scope="col">{t("ct.status")}</th><th scope="col">{t("ct.amount")}</th><th scope="col">{t("ct.due")}</th>{finance && <th scope="col"><span className="sr-only">{t("ct.markPaid")}</span></th>}</tr></thead>
         <tbody>{d.invoices.map(i => { const p = paid[i.id] ?? { on: today, amount: dec(i.amount_cents) }; return <tr key={i.id}>
           <td><bdi className="mono" dir="ltr">{i.reference}</bdi><br /><span className="soft" style={{ fontSize: 13 }}>{t(`ct.inv.${i.installment}` as I18nKey)}</span></td>
           <td><span className={`pill ${tone[i.status] ?? "neutral"}`}>{t(`ct.inv.${i.status}` as I18nKey)}</span></td>
           <td className="mono" dir="ltr">{usd(i.amount_cents)}</td>
           <td className="mono" dir="ltr" style={{ fontSize: 13 }}>{i.paid_at ? `✓ ${fmtDate(i.paid_at)}` : i.sent_at ? fmtDate(i.sent_at) : i.due_date || i.due_trigger}</td>
-          <td>{["sent", "overdue"].includes(i.status) && <form className="row" onSubmit={e => { e.preventDefault(); post(`inv-${i.id}`, `/api/admin/invoices/${i.id}/paid`, { paidOn: p.on, amount: p.amount }); }}>
+          {finance && <td>{["sent", "overdue"].includes(i.status) && <form className="row" onSubmit={e => { e.preventDefault(); post(`inv-${i.id}`, `/api/admin/invoices/${i.id}/paid`, { paidOn: p.on, amount: p.amount }); }}>
             <label className="sr-only" htmlFor={`on-${i.id}`}>{t("ct.paidOn")}</label><input className="input mono" style={{ width: 150 }} id={`on-${i.id}`} type="date" max={today} value={p.on} onChange={e => setPaid({ ...paid, [i.id]: { ...p, on: e.target.value } })} />
             <label className="sr-only" htmlFor={`am-${i.id}`}>{t("ct.amount")}</label><input className="input mono" style={{ width: 120 }} id={`am-${i.id}`} dir="ltr" value={p.amount} onChange={e => setPaid({ ...paid, [i.id]: { ...p, amount: e.target.value } })} />
             <button type="submit" className="btn btn-good btn-small" disabled={busy}>{t("ct.markPaid")}</button>
@@ -96,15 +97,19 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
           {i.status !== "pending" && <div className="row" style={{ marginTop: 6 }}>
             <a className="btn btn-small" href={`/admin/contracts/${c.id}/print?invoice=${i.id}`} target="_blank" rel="noreferrer">{t("ct.printInvoice")}</a>
             {["sent", "overdue"].includes(i.status) && <button type="button" className="btn btn-outline btn-small" disabled={busy} onClick={() => post(`inv-${i.id}`, `/api/admin/invoices/${i.id}/send`, {})}>{t("doc.emailInvoice")}</button>}
-          </div>}<Msg area={`inv-${i.id}`} /></td>
+          </div>}<Msg area={`inv-${i.id}`} /></td>}
         </tr>; })}</tbody>
       </table></div>
     </section>}
 
-    {admin && <section className="card card-pad stack" aria-labelledby="ct-next">
+    {!finance && d.invoices.length > 0 && <p className="soft" style={{ fontSize: 13 }}>{t("ct.financeOnly")}</p>}
+    {manage && <section className="card card-pad stack" aria-labelledby="ct-next">
       <h2 id="ct-next" style={{ fontSize: 17 }}>{t("ct.next")}</h2>
       {s === "submitted" && <div><button type="button" className="btn btn-outline" disabled={busy} onClick={() => act({ action: "review" })}>{t("ct.review")}</button></div>}
-      {(s === "submitted" || s === "under_review") && <div className="stack-s"><div className="row"><button type="button" className="btn btn-primary" disabled={busy} onClick={() => act({ action: "approve" })}>{t("ct.approve")}</button><button type="button" className="btn btn-bad" disabled={busy} onClick={() => setMode("reject")}>{t("ct.reject")}</button></div><span className="hint">{t("ct.approveHint")}</span></div>}
+      {(s === "submitted" || s === "under_review") && <div className="stack-s"><div className="row"><button type="button" className="btn btn-primary" disabled={busy} onClick={() => { if (window.confirm(t("ct.confirmQuote", { total: usd(c.total_cents), to: c.contact_email }))) act({ action: "send_quote" }); }}>{t("ct.sendQuote")}</button><button type="button" className="btn btn-bad" disabled={busy} onClick={() => setMode("reject")}>{t("ct.reject")}</button></div><span className="hint">{t("ct.quoteHint")}</span></div>}
+      {s === "quote_sent" && <p className="soft">{t("ct.waitingQuote", { date: c.quote_sent_at ? fmtDate(c.quote_sent_at) : "" })}</p>}
+      {s === "quote_accepted" && <div className="stack-s"><p className="success">{t("ct.quoteAccepted", { date: c.quote_decided_at ? fmtDate(c.quote_decided_at) : "" })}{c.quote_note ? ` · ${c.quote_note}` : ""}</p><div><button type="button" className="btn btn-primary" disabled={busy} onClick={() => act({ action: "send_contract" })}>{t("ct.sendContract")}</button></div><span className="hint">{t("ct.sendContractHint")}</span></div>}
+      {["submitted", "under_review", "rejected"].includes(s) && <div><button type="button" className="btn btn-small btn-bad" onClick={() => setMode("delete")}>{t("ct.delete")}</button></div>}
       {s === "contract_sent" && <form className="stack-s" onSubmit={e => { e.preventDefault(); act({ action: "signed", evidence }); }}>
         <label className="label" htmlFor="ev">{t("ct.evidence")}</label><input className="input" id="ev" required minLength={3} value={evidence} onChange={e => setEvidence(e.target.value)} aria-describedby="ev-h" /><span id="ev-h" className="hint">{t("ct.evidenceHint")}</span>
         <div><button type="submit" className="btn btn-primary" disabled={busy || evidence.trim().length < 3}>{t("ct.signed")}</button></div></form>}
@@ -113,13 +118,14 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
         <div><button type="submit" className="btn btn-primary" disabled={busy || !signingPaid}>{t("ct.activate")}</button></div></form>}
       {!open && <p className="soft">{t("ct.done")}</p>}
       {open && s !== "submitted" && s !== "under_review" && <div><button type="button" className="btn btn-small" onClick={() => setMode("cancel")}>{t("ct.cancel")}</button></div>}
-      {mode && <form className="stack-s" onSubmit={e => { e.preventDefault(); act({ action: mode, reason }); }}>
+      {mode && <form className="stack-s" onSubmit={async e => { e.preventDefault(); if (mode === "delete") { if (!window.confirm(t("ct.confirmDelete", { ref: c.reference }))) return; if (await act({ action: "delete", reason })) router.push("/admin/contracts"); } else act({ action: mode, reason }); }}>
+        {mode === "delete" && <p className="notice">{t("ct.deleteHint")}</p>}
         <label className="label" htmlFor="rs">{t("ct.reason")}</label><textarea className="textarea" id="rs" rows={3} required minLength={3} value={reason} onChange={e => setReason(e.target.value)} />
-        <div className="row"><button type="submit" className="btn btn-bad" disabled={busy || reason.trim().length < 3}>{t(mode === "reject" ? "ct.reject" : "ct.cancel")}</button><button type="button" className="btn" onClick={() => setMode("")}>{t("subs.cancel")}</button></div></form>}
+        <div className="row"><button type="submit" className="btn btn-bad" disabled={busy || reason.trim().length < 3}>{t(mode === "reject" ? "ct.reject" : mode === "delete" ? "ct.delete" : "ct.cancel")}</button><button type="button" className="btn" onClick={() => setMode("")}>{t("subs.cancel")}</button></div></form>}
       <Msg area="act" />
     </section>}
 
-    <section className="card card-pad stack" aria-labelledby="ct-team">
+    {admin && <section className="card card-pad stack" aria-labelledby="ct-team">
       <div className="row" style={{ justifyContent: "space-between" }}><h2 id="ct-team" style={{ fontSize: 17 }}>{t("ct.team")}</h2>
         <span className={`pill ${margin >= 0n ? "good" : "bad"}`}>{t("ct.margin", { amount: usd(margin.toString()), pct: revenue > 0n ? `${Number(margin * 1000n / revenue) / 10}%` : "—" })}</span></div>
       {d.assignments.length > 0 && <ul className="stack-s" style={{ margin: 0, paddingInlineStart: 18 }}>{d.assignments.map(a => <li key={a.id}>{a.staff} · {a.service_key} · <bdi className="mono" dir="ltr">{usd(a.monthly_cost_cents)}</bdi>/{t("cycle.monthly")} · {t("ct.from")} <bdi className="mono" dir="ltr">{a.started_on}</bdi></li>)}</ul>}
@@ -130,7 +136,7 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
         <div className="row" style={{ alignItems: "end" }}><div className="field" style={{ flex: 1 }}><label className="label" htmlFor="st-d">{t("ct.from")}</label><input className="input mono" id="st-d" type="date" required value={staff.startedOn} onChange={e => setStaff({ ...staff, startedOn: e.target.value })} /></div><button type="submit" className="btn btn-outline" disabled={busy}>{t("ct.addStaff")}</button></div>
       </form>}
       <Msg area="staff" />
-    </section>
+    </section>}
 
     <section className="card card-pad stack-s" aria-labelledby="ct-hist">
       <h2 id="ct-hist" style={{ fontSize: 17 }}>{t("ct.history")}</h2>

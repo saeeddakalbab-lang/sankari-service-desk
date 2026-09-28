@@ -2,7 +2,7 @@ export const REQUEST_TYPES=["subscription_approval","helpdesk_ticket","email_acc
 export type RequestType=typeof REQUEST_TYPES[number];
 export const PRIORITIES=["low","medium","high","urgent"] as const;
 export type Priority=typeof PRIORITIES[number];
-export const ROLES=["employee","agent","admin","board","dev","accountant","ceo","owner","manager"] as const;
+export const ROLES=["employee","agent","admin","board","dev","accountant","ceo","owner","manager","contracts"] as const;
 export type Role=typeof ROLES[number];
 // Request types that travel Employee -> Manager -> CEO before fulfilment. Helpdesk and email accounts go straight to the agent queue.
 export const APPROVAL_TYPES:readonly RequestType[]=["subscription_approval"];

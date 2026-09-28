@@ -1,6 +1,6 @@
 import { Logo } from "./Logo";
-import { money, type Block, type ContractDoc } from "@/lib/contract-template";
-import type { InvoiceDoc } from "@/lib/contract-docs";
+import { arMonths, money, type Block, type ContractDoc } from "@/lib/contract-template";
+import type { InvoiceDoc, QuoteDoc } from "@/lib/contract-docs";
 
 // The printed contract (Arabic, as signed) and the bilingual invoice. Both are A4 pages the browser's
 // "Save as PDF" turns into the file that is sent; the same components serve the admin and the client link.
@@ -41,6 +41,33 @@ export function ContractDocument({ doc }: { doc: ContractDoc }) {
       <Signatures doc={doc} withDate={false} />
       <p className="cdoc-note">{doc.note}</p>
     </section>
+  </article>;
+}
+
+export function QuoteDocument({ q }: { q: QuoteDoc }) {
+  const p = q.party;
+  return <article className="cdoc cinv" lang="ar" dir="rtl">
+    <header className="cinv-head">
+      <div><Logo tone="dark" width={110} /><p className="cinv-from"><strong>{p.legalName}</strong>{p.address && <><br />{p.address}</>}{p.email && <><br /><bdi dir="ltr">{p.email}</bdi></>}</p></div>
+      <div className="cinv-title"><h1>عرض سعر <span lang="en" dir="ltr">QUOTATION</span></h1>
+        <table className="cinv-meta"><tbody>
+          <tr><th>المرجع · Reference</th><td dir="ltr">{q.reference}</td></tr>
+          <tr><th>التاريخ · Date</th><td dir="ltr">{q.date}</td></tr>
+          <tr><th>المدة · Duration</th><td>{arMonths(q.months)} · <span dir="ltr">{q.start}</span></td></tr>
+        </tbody></table></div>
+    </header>
+    <section className="cinv-to"><h2>إلى · To</h2><p><strong>{q.company}</strong><br />{q.contact} · <bdi dir="ltr">{q.email}</bdi></p></section>
+    <table className="cdoc-table cinv-lines"><thead><tr><th scope="col">الخدمة · Service</th><th scope="col">التغطية · Load</th><th scope="col">شهرياً · Monthly (USD)</th><th scope="col">الإجمالي · Total (USD)</th></tr></thead>
+      <tbody>{q.lines.map(l => <tr key={l.en}><td>{l.ar}<br /><span lang="en" dir="ltr" className="cinv-en">{l.en}</span></td>
+        <td>{l.weeks && l.days ? `${l.weeks} أسبوع × ${l.days} أيام × 8 ساعات = ${l.hours} ساعة شهرياً` : `${l.hours} ساعة شهرياً`}</td><td dir="ltr">{money(l.monthlyCents)}</td><td dir="ltr">{money(l.totalCents)}</td></tr>)}
+        {q.premiumCents > 0n && <tr><td>علاوة التنفيذ في الموقع · Onsite premium</td><td /><td /><td dir="ltr">{money(q.premiumCents)}</td></tr>}
+        {q.discountCents > 0n && <><tr><td>المجموع · Subtotal</td><td /><td /><td dir="ltr">{money(q.subtotalCents)}</td></tr><tr><td>خصم {q.discountBps / 100}% · Discount</td><td /><td /><td dir="ltr">− {money(q.discountCents)}</td></tr></>}
+        <tr className="cdoc-total"><td>الإجمالي لمدة العقد · Total</td><td /><td /><td dir="ltr">USD {money(q.totalCents)}</td></tr></tbody></table>
+    <p className="cinv-words">المبلغ كتابةً: {q.words}</p>
+    <section className="cinv-pay"><h2>الدفعات · Payment plan</h2>
+      <p>{q.plan[0] / 100}% عند توقيع العقد وقبل بدء العمل · {q.plan[1] / 100}% في منتصف المدة · {q.plan[2] / 100}% عند نهاية المدة.</p>
+      <p lang="en" dir="ltr" className="cinv-en">{q.plan[0] / 100}% on signing, before work starts · {q.plan[1] / 100}% at the midpoint · {q.plan[2] / 100}% at the end.</p>
+      <p className="cinv-small">الأسعار بالدولار الأميركي ولا تشمل الضرائب والرسوم النظامية. بعد الموافقة على العرض نرسل العقد لتوقيعه من قبل شركتكم. · Prices in US dollars, excluding taxes. After you accept, we send the contract for your company to sign.</p></section>
   </article>;
 }
 

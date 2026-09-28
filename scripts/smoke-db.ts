@@ -1,7 +1,9 @@
 import { getKpis } from "../lib/kpi";
 import { getJiraIssues,getJiraOverview } from "../lib/jira";
 import { pool,query } from "../lib/db";
-import { contractDocument } from "../lib/contract-docs";
+import { contractDocument, quoteDocument } from "../lib/contract-docs";
+import { listReceivables, receivablesXlsx } from "../lib/receivables";
+import { buildStatement, getAccounting } from "../lib/statements";
 
 const requiredTables=["users","requests","comments","audit_log","email_outbox","jira_issues","migration_staging","settings","companies","services","subscriptions","purchase_requests","contracts","contract_line_items","invoices","payables","ledger_entries","contract_assignments"];
 const tables=await query<{table_name:string}>(`SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name = ANY($1::text[])`,[requiredTables]);
@@ -55,7 +57,11 @@ try {
   if (!x || x.doc.sections.length !== 19 || x.doc.controlNo !== "SH-IT-MS" || !JSON.stringify(x.doc).includes("دمشق – الشعلان")) throw new Error("Contract document was not built from the saved contract");
   const plan = x.doc.sections[6].blocks.find(b => b.kind === "table");
   if (!plan || plan.kind !== "table" || plan.total?.[2] !== "19,500.00") throw new Error(`Contract payment plan is wrong: ${JSON.stringify(plan)}`);
+  const qd = await quoteDocument(docId);
+  if (!qd || qd.lines.length !== 2 || qd.totalCents !== 1950000n) throw new Error("Quotation was not built from the saved contract");
 } finally { await query(`DELETE FROM contracts WHERE id=$1`, [docId]); }
+receivablesXlsx(await listReceivables());
+await buildStatement((await getAccounting()).openingMonth);
 const freeze = await pool.connect();
 try {
   await freeze.query("BEGIN");

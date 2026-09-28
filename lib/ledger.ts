@@ -3,6 +3,7 @@ import { query, transaction } from "./db";
 import { AppError } from "./errors";
 import { usdToAedCents } from "./money";
 import { getUsdToAedRate } from "./settings";
+import { listReceivables } from "./receivables";
 import type { User } from "./types";
 
 // One view of cash in vs cash out, in AED (the reporting currency). Sources:
@@ -34,8 +35,7 @@ export async function ledgerOverview(user: User, months = 12) {
   for (const l of lines) { const m = byMonth.get(l.date.slice(0, 7)); if (m) m[l.direction] += BigInt(l.amount_aed_cents); }
   let running = 0n;
   const flow = [...byMonth].reverse().map(([month, v]) => { running += v.in - v.out; return { month, inAedCents: v.in.toString(), outAedCents: v.out.toString(), netAedCents: (v.in - v.out).toString(), runningAedCents: running.toString() }; });
-  const receivables = (await query(`SELECT i.id,i.reference,i.installment::text,i.amount_cents::text,i.currency,i.status::text,to_char(i.sent_at,'YYYY-MM-DD') sent_on,c.company_name,c.id contract_id,
-      greatest(0,(current_date - i.sent_at::date))::int days_open FROM invoices i JOIN contracts c ON c.id=i.contract_id WHERE i.status IN ('sent','overdue') AND c.sample IS NOT TRUE ORDER BY i.sent_at`)).rows;
+  const receivables = await listReceivables();
   const upcoming = (await query(`
     SELECT 'subscription' kind,s.id,s.name label,s.company_name company,to_char(s.renewal_date,'YYYY-MM-DD') due,s.amount_cents::text,s.currency,(s.renewal_date-current_date)::int days
       FROM subscriptions s WHERE s.status IN ('active','renewal_due') AND s.cancel_at IS NULL AND s.renewal_date BETWEEN current_date AND current_date+30

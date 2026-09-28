@@ -6,10 +6,9 @@ import { Logo } from "./Logo";
 import { MAX_MONTHS, quote, withWorkPattern, type PricingConfig } from "@/lib/pricing";
 
 const AR: Record<string, string> = { consultant: "مستشار", it_support: "أخصائي دعم تقني", devops: "DevOps", cybersecurity: "الأمن السيبراني" };
-const usd = (c: bigint) => `USD ${(c / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${(c % 100n).toString().padStart(2, "0")}`;
 const setCookie = (k: string, v: string) => { document.cookie = `${k}=${v}; path=/; max-age=31536000; samesite=lax${location.protocol === "https:" ? "; secure" : ""}`; };
 
-// Public contract request. The live price uses the same function as the server; the server's figure wins.
+// Public contract request: the services and the time needed, no price. The quotation follows by email.
 export function ContractRequestForm({ pricing, minDate }: { pricing: PricingConfig; minDate: string }) {
   const t = useT(), locale = useLocale(), router = useRouter();
   const keys = Object.keys(pricing.services), label = (k: string) => locale === "ar" ? AR[k] ?? pricing.services[k].label : pricing.services[k].label;
@@ -90,17 +89,12 @@ export function ContractRequestForm({ pricing, minDate }: { pricing: PricingConf
             </div>
           </section>
         </div>
+        {/* No price here: the team reviews the requirements and sends a quotation by email. */}
         <aside className="card card-pad stack public-price" aria-labelledby="cr-price" aria-live="polite">
-          <h2 id="cr-price" style={{ fontSize: 17 }}>{t("cr.price")}</h2>
-          {q ? <>
-            <ul className="stack-s" style={{ listStyle: "none", margin: 0, padding: 0 }}>{q.lines.map(l => <li key={l.serviceKey} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 8 }}>
-              <strong>{label(l.serviceKey)}</strong> <span className="soft">· {t("cr.lineLoad", { w: l.weeksPerMonth, d: l.daysPerWeek, h: l.hoursPerMonth })}</span><br />
-              <span className="mono soft" dir="ltr" style={{ fontSize: 14 }}>{t("cr.perMonth", { amount: usd(l.monthlyPriceCents) })}</span><br />
-              <span className="mono" dir="ltr" style={{ fontSize: 14 }}>{t("cr.lineTotal", { amount: usd(l.lineTotalCents), m: f.durationMonths })}</span></li>)}</ul>
-            {q.onsitePremiumCents > 0n && <p className="soft">{t("cr.premium")}: <bdi className="mono" dir="ltr">{usd(q.onsitePremiumCents)}</bdi></p>}
-            <div><span className="soft" style={{ fontSize: 13 }}>{t("cr.total")}</span><div className="mono" dir="ltr" style={{ fontSize: 26, fontWeight: 600 }}>{usd(q.totalCents)}</div></div>
-            <p className="soft" style={{ fontSize: 13 }}>{t("cr.payments")}</p>
-          </> : <p className="soft">—</p>}
+          <h2 id="cr-price" style={{ fontSize: 17 }}>{t("cr.summary")}</h2>
+          {q ? <ul className="stack-s" style={{ listStyle: "none", margin: 0, padding: 0 }}>{q.lines.map(l => <li key={l.serviceKey} style={{ borderBottom: "1px solid var(--line)", paddingBottom: 8 }}>
+            <strong>{label(l.serviceKey)}</strong><br /><span className="soft">{t("cr.lineLoad", { w: l.weeksPerMonth, d: l.daysPerWeek, h: l.hoursPerMonth })}</span></li>)}</ul> : <p className="soft">—</p>}
+          <p className="soft" style={{ fontSize: 14 }}>{t("cr.quoteNext")}</p>
           {error && <div className="notice" role="alert">{error}</div>}
           <button type="submit" className="btn btn-primary" disabled={busy || !q}>{t("cr.submit")}</button>
         </aside>

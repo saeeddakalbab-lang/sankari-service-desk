@@ -151,11 +151,11 @@ try {
   await refused("second first bill for the same subscription", ...bill("initial", "request_id", [subReq]));
   await refused("edit a bill's amount", `UPDATE subscription_bills SET amount_cents=1 WHERE subscription_id=$1`, [gsub]);
   await refused("edit a bill's date", `UPDATE subscription_bills SET billed_on=billed_on-1 WHERE subscription_id=$1`, [gsub]);
-  await refused("delete a bill", `DELETE FROM subscription_bills WHERE subscription_id=$1`, [gsub]);
   // Until its statement is sent, a charge may change its person and company only (migration 016).
   await accepted("correct the person and company of an unsent bill", `UPDATE subscription_bills SET beneficiary='Guard Person',company_name='Guard Co' WHERE subscription_id=$1`, [gsub]);
   await accepted("sending the statement locks the bill", `UPDATE subscription_bills SET locked_at=now() WHERE subscription_id=$1`, [gsub]);
   await refused("correct a bill after its statement was sent", `UPDATE subscription_bills SET beneficiary='Someone else' WHERE subscription_id=$1`, [gsub]);
+  await refused("delete a bill after its statement was sent", `DELETE FROM subscription_bills WHERE subscription_id=$1`, [gsub]);
   await refused("unlock a sent bill", `UPDATE subscription_bills SET locked_at=NULL WHERE subscription_id=$1`, [gsub]);
   // Approved on a phone call (migration 017): needs who approved it and the date of the call.
   await refused("phone bill without who approved it", ...bill("phone", "", []));
@@ -163,6 +163,8 @@ try {
   await refused("phone bill with a blank approver", ...bill("phone", "phone_approved_by,phone_approved_on", ["  ", new Date().toISOString().slice(0, 10)]));
   await refused("phone bill with a call in the future", ...bill("phone", "phone_approved_by,phone_approved_on", ["Guard Chair", "2999-01-01"]));
   await accepted("phone bill with the approver and the date", ...bill("phone", "phone_approved_by,phone_approved_on,approval_note", ["Guard Chair", new Date().toISOString().slice(0, 10), "approved on a call"]));
+  // A wrong, unsent charge can be deleted (migration 020); the app keeps a copy in the audit log.
+  await accepted("delete an unsent charge", `DELETE FROM subscription_bills WHERE subscription_id=$1 AND kind='phone'`, [gsub]);
   await refused("unknown bill kind", ...bill("gift", "", []));
   void firstBill;
   const ren = (await c.query<{ id: string }>(`INSERT INTO subscription_renewals(subscription_id,renewal_date,owner_user_id) VALUES($1,current_date+10,$2) RETURNING id`, [gsub, emp])).rows[0].id;
@@ -186,9 +188,11 @@ try {
   // Until its statement is sent a payment can be corrected (migration 016); after that it is fixed.
   await accepted("correct an unsent payment, with its person and company", `UPDATE statement_credits SET amount_aed_cents=40000,beneficiary='Guard Person',company_name='Guard Co' WHERE description='guard'`);
   await refused("change who entered a payment", `UPDATE statement_credits SET created_at=created_at-interval '1 day' WHERE description='guard'`);
-  await refused("delete a payment", `DELETE FROM statement_credits WHERE description='guard'`);
+  await accepted("record a payment with the employee's department", `INSERT INTO statement_credits(occurred_on,kind,amount_aed_cents,description,department) VALUES(current_date,'payment',100,'guard-wrong','Finance')`);
+  await accepted("delete a wrong unsent payment", `DELETE FROM statement_credits WHERE description='guard-wrong'`);
   await accepted("sending the statement locks the payment", `UPDATE statement_credits SET locked_at=now() WHERE description='guard'`);
   await refused("edit a payment after its statement was sent", `UPDATE statement_credits SET amount_aed_cents=1 WHERE description='guard'`);
+  await refused("delete a payment after its statement was sent", `DELETE FROM statement_credits WHERE description='guard'`);
   await refused("unlock a sent payment", `UPDATE statement_credits SET locked_at=NULL WHERE description='guard'`);
   await refused("statement whose closing does not add up", `INSERT INTO monthly_statements(month,opening_aed_cents,charges_aed_cents,credits_aed_cents,closing_aed_cents,lines) VALUES('2020-01-01',100,50,20,131,1)`);
   await refused("statement dated mid-month", `INSERT INTO monthly_statements(month,opening_aed_cents,charges_aed_cents,credits_aed_cents,closing_aed_cents,lines) VALUES('2020-01-15',100,50,20,130,1)`);
@@ -216,6 +220,7 @@ try {
   // are written at approval, after the discount has set the total.
   await accepted("a 10% discount while under review", `UPDATE contracts SET adjustment_kind='discount',adjustment_bps=1000,discount_cents=0,list_total_cents=total_cents WHERE id=$1`, [ct]);
   await accepted("approve the contract", `UPDATE contracts SET status='approved' WHERE id=$1`, [ct]);
+  await refused("delete an approved contract", `DELETE FROM contracts WHERE id=$1`, [ct]);
   await refused("change the price after approval", `UPDATE contracts SET total_cents=total_cents+1,subtotal_cents=subtotal_cents+1 WHERE id=$1`, [ct]);
   await refused("change the discount after approval", `UPDATE contracts SET adjustment_bps=500,discount_cents=500 WHERE id=$1`, [ct]);
   await refused("remove the discount after approval", `UPDATE contracts SET adjustment_kind=NULL,adjustment_bps=0,discount_cents=0 WHERE id=$1`, [ct]);
@@ -235,7 +240,24 @@ try {
   await refused("edit a ledger line", `UPDATE ledger_entries SET amount_cents=1 WHERE description='guard'`);
   await refused("delete a ledger line", `DELETE FROM ledger_entries WHERE description='guard'`);
 
+  // Quotation before contract (migration 020).
+  const q = (await c.query<{ id: string }>(`INSERT INTO contracts(reference,company_name,contact_name,contact_email,support_type,requested_start_date,duration_months,subtotal_cents,total_cents,pricing_snapshot,sample)
+      VALUES('GUARD-CT-Q','Guard Co','Guard','guard@example.com','remote',current_date,6,6000,6000,'{}',true) RETURNING id`)).rows[0].id;
+  await refused("send the contract before a quotation", `UPDATE contracts SET status='contract_sent' WHERE id=$1`, [q]);
+  await accepted("send the quotation", `UPDATE contracts SET status='quote_sent',quote_sent_at=now() WHERE id=$1`, [q]);
+  await refused("change the price after the quotation was sent", `UPDATE contracts SET total_cents=1,subtotal_cents=1 WHERE id=$1`, [q]);
+  await refused("change the client details after the quotation was sent", `UPDATE contracts SET client_details='{"title":"x"}' WHERE id=$1`, [q]);
+  await refused("delete a quoted request", `DELETE FROM contracts WHERE id=$1`, [q]);
+  await refused("send the contract before the client accepts", `UPDATE contracts SET status='contract_sent' WHERE id=$1`, [q]);
+  await accepted("the client accepts the quotation", `UPDATE contracts SET status='quote_accepted',quote_decided_at=now() WHERE id=$1`, [q]);
+  await accepted("send the contract after acceptance", `UPDATE contracts SET status='contract_sent',contract_sent_at=now() WHERE id=$1`, [q]);
+  const w = (await c.query<{ id: string }>(`INSERT INTO contracts(reference,company_name,contact_name,contact_email,support_type,requested_start_date,duration_months,subtotal_cents,total_cents,pricing_snapshot,sample)
+      VALUES('GUARD-CT-W','Guard Co','Guard','guard@example.com','remote',current_date,6,6000,6000,'{}',true) RETURNING id`)).rows[0].id;
+  await accepted("delete a request submitted with wrong data", `DELETE FROM contracts WHERE id=$1`, [w]);
+
   console.log("== Users");
+  await accepted("the Contracts role", `UPDATE users SET roles=array_append(roles,'contracts') WHERE id=$1`, [emp]);
+  await refused("an unknown role", `UPDATE users SET roles=array_append(roles,'finance') WHERE id=$1`, [emp]);
   await refused("user as their own manager", `UPDATE users SET manager_user_id=id WHERE id=$1`, [emp]);
   await c.query(`UPDATE users SET roles=roles||'{ceo}' WHERE id=$1 AND NOT EXISTS (SELECT 1 FROM users WHERE 'ceo'=ANY(roles) AND disabled_at IS NULL)`, [ceo]);
   await refused("two active CEOs", `UPDATE users SET roles=array_append(roles,'ceo') WHERE id IN ($1,$2)`, [mgr, emp]);

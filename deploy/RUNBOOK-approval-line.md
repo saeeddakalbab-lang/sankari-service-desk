@@ -447,3 +447,23 @@ After deploy:
 check https://it-portal.sankari-holding.com/api/health                 # 200
 check https://it-portal.sankari-holding.com/c/00000000-0000-0000-0000-000000000000?k=x   # 404
 ```
+
+# Step R: quotations, the Contracts role, deleting wrong entries (migration 020)
+
+Same routine: dump with `STEP=020`, rehearse on the restored copy, then deploy the site **and** the
+worker.
+
+| Migration | What it does | Rollback |
+|---|---|---|
+| `020_quotes_roles_deletes.sql` | Adds the `contracts` role; the contract statuses `quote_sent` and `quote_accepted` (the price goes to the client as a quotation, the contract to sign only after they accept); a delete guard on contracts (only submitted, under review or rejected, with no invoices); lets an unsent payment, refund or charge be deleted (a sent one stays fixed); adds `statement_credits.department`. No row is changed. | `db/rollback/020_quotes_roles_deletes.down.sql`: refuses while anything uses the additions. PostgreSQL cannot drop enum values, so the two statuses stay in the type, unused. |
+
+Behaviour after deploy:
+
+- The public form shows no price. The Contracts team (or an admin) sets any discount or profit, then
+  **Send quotation**; the client accepts or declines from the emailed link; then **Send the contract
+  to sign** creates the invoices and emails the contract with the signing invoice.
+- Contract steps: `admin` and `contracts`. Invoices, payments and receivables: `admin` and
+  `accountant`. Give the Contracts role in Admin settings → People.
+- Accounting → Outstanding receivables: by company, Excel export, **Email to accounting** (to the
+  address in Monthly statement → Settings), and **Payment received** to finish an invoice.
+- A contract already in `approved`/`contract_sent` (CT-2026-0001) is unaffected.

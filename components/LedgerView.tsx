@@ -8,6 +8,40 @@ import { formatMoney } from "@/lib/money";
 
 type Data = { flow: { month: string; inAedCents: string; outAedCents: string; netAedCents: string; runningAedCents: string }[]; lines: Record<string, any>[]; receivables: Record<string, any>[]; upcoming: Record<string, any>[]; margins: Record<string, any>[]; payables: Record<string, any>[]; estimatedLines: number };
 const aed = (c: string) => formatMoney(c, "AED");
+const dec = (c: string) => { const v = BigInt(c); return `${v / 100n}.${(v % 100n).toString().padStart(2, "0")}`; };
+
+// Outstanding receivables by company: export or email each company's list (or all) to the accounting
+// address, and mark an invoice paid when the money reaches the account.
+function Receivables({ rows, today, busy, post, Msg }: { rows: Record<string, any>[]; today: string; busy: boolean; post: (area: string, url: string, body: object) => Promise<boolean>; Msg: (p: { area: string }) => React.ReactNode }) {
+  const t = useT(), [paid, setPaid] = useState<Record<string, { on: string; amount: string }>>({}), [open, setOpen] = useState<string | null>(null);
+  const groups = [...rows.reduce<Map<string, Record<string, any>[]>>((m, r) => m.set(r.company_name, [...(m.get(r.company_name) ?? []), r]), new Map<string, Record<string, any>[]>())];
+  const totals = (list: Record<string, any>[]) => Object.entries(list.reduce<Record<string, bigint>>((m, r) => ({ ...m, [r.currency]: (m[r.currency] ?? 0n) + BigInt(r.amount_cents) }), {})).map(([cur, v]) => formatMoney(v.toString(), cur)).join(" + ");
+  const send = (company?: string) => { if (window.confirm(t("rc.confirmEmail", { who: company ?? t("rc.all") }))) post(`rc-${company ?? "all"}`, "/api/admin/receivables/email", company ? { company } : {}); };
+  return <section className="card" aria-labelledby="lg-rec">
+    <div className="card-head"><div className="stack-s" style={{ gap: 2 }}><h2 id="lg-rec">{t("lg.receivables")}</h2><span className="soft" style={{ fontSize: 13 }}>{t("rc.lead")}</span></div>
+      {rows.length > 0 && <div className="row"><a className="btn btn-small" href="/api/admin/receivables/xlsx" download>{t("rc.exportAll")}</a><button type="button" className="btn btn-small btn-outline" disabled={busy} onClick={() => send()}>{t("rc.emailAll")}</button></div>}</div>
+    <div className="card-pad" style={{ paddingTop: 0 }}><Msg area="rc-all" /></div>
+    {groups.length ? groups.map(([company, list]) => <div key={company} className="rc-group">
+      <div className="row rc-head" style={{ justifyContent: "space-between" }}>
+        <div><strong>{company}</strong> <span className="soft">· {t("rc.count", { n: list.length })} · </span><strong className="mono" dir="ltr">{totals(list)}</strong></div>
+        <div className="row"><a className="btn btn-small" href={`/api/admin/receivables/xlsx?company=${encodeURIComponent(company)}`} download>{t("rc.export")}</a><button type="button" className="btn btn-small btn-outline" disabled={busy} onClick={() => send(company)}>{t("rc.email")}</button></div>
+      </div>
+      <Msg area={`rc-${company}`} />
+      <div className="table-wrap"><table className="table"><thead><tr><th scope="col">{t("ct.ref")}</th><th scope="col">{t("ct.amount")}</th><th scope="col">{t("rc.due")}</th><th scope="col">{t("lg.daysOpen")}</th><th scope="col"><span className="sr-only">{t("ct.markPaid")}</span></th></tr></thead>
+        <tbody>{list.map(r => { const p = paid[r.id] ?? { on: today, amount: dec(r.amount_cents) }; return <tr key={r.id}>
+          <td><Link className="ref" href={`/admin/contracts/${r.contract_id}`} dir="ltr">{r.reference}</Link><br /><span className="soft" style={{ fontSize: 12 }}>{t(`ct.inv.${r.installment}` as I18nKey)} · {r.share_bps / 100}%</span></td>
+          <td className="mono" dir="ltr" style={{ whiteSpace: "nowrap" }}>{formatMoney(r.amount_cents, r.currency)}</td>
+          <td className="mono" dir="ltr" style={{ whiteSpace: "nowrap" }}>{r.due_on}</td>
+          <td><span className={`pill ${r.days_late > 0 ? "bad" : "gold"}`}>{r.days_open}</span>{r.days_late > 0 && <span className="soft" style={{ fontSize: 12 }}> · {t("rc.late", { n: r.days_late })}</span>}</td>
+          <td>{open === r.id ? <form className="row" onSubmit={async e => { e.preventDefault(); if (await post(`rc-${company}`, `/api/admin/invoices/${r.id}/paid`, { paidOn: p.on, amount: p.amount })) setOpen(null); }}>
+            <label className="sr-only" htmlFor={`rp-on-${r.id}`}>{t("ct.paidOn")}</label><input className="input mono" style={{ width: 150 }} id={`rp-on-${r.id}`} type="date" max={today} required value={p.on} onChange={e => setPaid({ ...paid, [r.id]: { ...p, on: e.target.value } })} />
+            <label className="sr-only" htmlFor={`rp-am-${r.id}`}>{t("ct.amount")}</label><input className="input mono" style={{ width: 120 }} id={`rp-am-${r.id}`} dir="ltr" required value={p.amount} onChange={e => setPaid({ ...paid, [r.id]: { ...p, amount: e.target.value } })} />
+            <button type="submit" className="btn btn-good btn-small" disabled={busy}>{t("rc.confirmPaid")}</button><button type="button" className="btn btn-small" onClick={() => setOpen(null)}>{t("st2.cancel")}</button></form>
+            : <button type="button" className="btn btn-small btn-good" onClick={() => setOpen(r.id)}>{t("rc.finish")}</button>}</td>
+        </tr>; })}</tbody></table></div>
+    </div>) : <p className="card-pad soft">{t("lg.noReceivables")}</p>}
+  </section>;
+}
 
 export function LedgerView({ d, today }: { d: Data; today: string }) {
   const t = useT(), router = useRouter();
@@ -35,12 +69,9 @@ export function LedgerView({ d, today }: { d: Data; today: string }) {
       <p className="card-pad soft" style={{ fontSize: 13, paddingTop: 0 }}><span className="ledger-key in" aria-hidden="true" /> {t("lg.in")} · <span className="ledger-key out" aria-hidden="true" /> {t("lg.out")}</p>
     </section>
 
+    <Receivables rows={d.receivables} today={today} busy={busy} post={post} Msg={Msg} />
+
     <div className="grid-2" style={{ alignItems: "start" }}>
-      <section className="card" aria-labelledby="lg-rec"><div className="card-head"><h2 id="lg-rec">{t("lg.receivables")}</h2></div>
-        {d.receivables.length ? <div className="table-wrap"><table className="table"><thead><tr><th scope="col">{t("ct.ref")}</th><th scope="col">{t("ct.company")}</th><th scope="col">{t("ct.amount")}</th><th scope="col">{t("lg.daysOpen")}</th></tr></thead>
-          <tbody>{d.receivables.map(r => <tr key={r.id}><td><Link className="ref" href={`/admin/contracts/${r.contract_id}`} dir="ltr">{r.reference}</Link></td><td>{r.company_name}</td><td className="mono" dir="ltr">{formatMoney(r.amount_cents, r.currency)}</td>
-            <td><span className={`pill ${r.status === "overdue" ? "bad" : "gold"}`}>{r.days_open}</span></td></tr>)}</tbody></table></div> : <p className="card-pad soft">{t("lg.noReceivables")}</p>}
-      </section>
       <section className="card" aria-labelledby="lg-up"><div className="card-head"><h2 id="lg-up">{t("lg.upcoming")}</h2></div>
         {d.upcoming.length ? <div className="table-wrap"><table className="table"><thead><tr><th scope="col">{t("lg.vendor")}</th><th scope="col">{t("lg.source")}</th><th scope="col">{t("ct.amount")}</th><th scope="col">{t("lg.nextDue")}</th></tr></thead>
           <tbody>{d.upcoming.map(u => <tr key={u.kind + u.id}><td>{u.label}{u.company ? <><br /><span className="soft" style={{ fontSize: 12 }}>{u.company}</span></> : null}</td><td>{t(`lg.src.${u.kind}` as I18nKey)}</td>

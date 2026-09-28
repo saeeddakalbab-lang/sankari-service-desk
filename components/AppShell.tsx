@@ -10,7 +10,7 @@ import type { I18nKey } from "@/lib/i18n";
 import { OVERSIGHT_ROLES,type Role,type User } from "@/lib/types";
 
 export const initials=(n:string)=>n.split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join("").toUpperCase();
-const rolePriority:Role[]=["ceo","owner","admin","board","agent","dev","accountant","employee"];
+const rolePriority:Role[]=["ceo","owner","admin","board","agent","dev","accountant","contracts","employee"];
 
 // The menu shows only what this person can use; every page and API still checks the role on the server.
 type Group="requests"|"work"|"finance"|"oversight"|"settings";
@@ -27,7 +27,7 @@ export function AppShell({user,approvals,ownsSubs=false,children}:{user:User;app
     {href:"/subscriptions",label:t("nav.subs"),icon:<IconRepeat/>,group:"work",show:ownsSubs||has(["admin"])},
     {href:"/admin/bills",label:t("nav.bills"),icon:<IconReceipt/>,group:"finance",show:has(["admin","accountant"])},
     {href:"/admin/statements",label:t("nav.statements"),icon:<IconList/>,group:"finance",show:has(["admin","accountant"])},
-    {href:"/admin/contracts",label:t("nav.contracts"),icon:<IconCheckSquare/>,group:"finance",show:has(["admin","accountant"]),match:p=>p.startsWith("/admin/contracts")},
+    {href:"/admin/contracts",label:t("nav.contracts"),icon:<IconCheckSquare/>,group:"finance",show:has(["admin","contracts","accountant"]),match:p=>p.startsWith("/admin/contracts")},
     {href:"/admin/ledger",label:t("nav.ledger"),icon:<IconChart/>,group:"finance",show:has(["admin","accountant"])},
     {href:"/oversight",label:t("nav.stuck"),icon:<IconClock/>,group:"oversight",show:has(OVERSIGHT_ROLES)},
     {href:"/dashboard/kpi",label:t("nav.kpi"),icon:<IconChart/>,group:"oversight",show:has(OVERSIGHT_ROLES)},

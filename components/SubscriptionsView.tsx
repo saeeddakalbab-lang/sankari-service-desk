@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useT } from "./I18n";
+import { useLocale, useT } from "./I18n";
 import type { I18nKey } from "@/lib/i18n";
 import { CURRENCIES, formatMoney, isRate, parseAmountToCents, toAedCents } from "@/lib/money";
 import { COMPANIES } from "@/lib/companies";
+import { DEPARTMENTS } from "@/lib/departments";
 import type { SubscriptionRow } from "@/lib/subscriptions";
 
 type Req = { id: string; ref: string; subject: string; company: string; requesterUserId: string; requester: string; service: string; amountCents: string; currency: string };
@@ -29,7 +30,7 @@ const costOk = (c: Cost) => parseAmountToCents(c.amount) !== null && (c.currency
 
 // Owners renew or decline here; admins also record subscriptions from approved requests and from phone approvals.
 export function SubscriptionsView({ rows, admin, selfId, requests, people }: { rows: SubscriptionRow[]; admin: boolean; selfId: string; requests: Req[]; people: { id: string; name: string }[] }) {
-  const t = useT(), router = useRouter();
+  const t = useT(), locale = useLocale(), router = useRouter();
   const [msg, setMsg] = useState<{ id: string; ok: boolean; text: string } | null>(null), [busy, setBusy] = useState(false);
   const [declining, setDeclining] = useState<string | null>(null), [note, setNote] = useState("");
   const [renewing, setRenewing] = useState<string | null>(null), [renewCost, setRenewCost] = useState<Cost>({ amount: "", currency: "AED", aedRate: "" });
@@ -56,7 +57,7 @@ export function SubscriptionsView({ rows, admin, selfId, requests, people }: { r
   };
 
   // 2. Approved on a phone call: a new subscription, or a renewal of one already on the list.
-  const blankPhone = { mode: "new" as "new" | "renewal", subscriptionId: "", name: "", provider: "", companyName: COMPANIES[0] as string, beneficiary: "", cycle: "annual", renewalDate: "", ownerUserId: selfId, cardLast4: "", approvedBy: "", approvedOn: today(), billedOn: today(), note: "" };
+  const blankPhone = { mode: "new" as "new" | "renewal", subscriptionId: "", name: "", provider: "", companyName: COMPANIES[0] as string, department: "", beneficiary: "", cycle: "annual", renewalDate: "", ownerUserId: selfId, cardLast4: "", approvedBy: "", approvedOn: today(), billedOn: today(), note: "" };
   const [ph, setPh] = useState(blankPhone), [phCost, setPhCost] = useState<Cost>({ amount: "", currency: "AED", aedRate: "" });
   const setP = (k: keyof typeof ph) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setPh({ ...ph, [k]: e.target.value });
   const renewable = rows.filter(r => r.billing_frequency !== "one_off" && r.status !== "cancelled");
@@ -65,10 +66,10 @@ export function SubscriptionsView({ rows, admin, selfId, requests, people }: { r
     e.preventDefault();
     const common = { approvedBy: ph.approvedBy, approvedOn: ph.approvedOn, billedOn: ph.billedOn, note: ph.note, actual: phCost };
     const body = ph.mode === "renewal" ? { mode: "renewal", subscriptionId: ph.subscriptionId, ...common }
-      : { mode: "new", name: ph.name, provider: ph.provider, companyName: ph.companyName, beneficiary: ph.beneficiary, cycle: ph.cycle, renewalDate: ph.cycle === "one_off" ? null : ph.renewalDate, ownerUserId: ph.ownerUserId, cardLast4: ph.cardLast4, ...common };
+      : { mode: "new", name: ph.name, provider: ph.provider, companyName: ph.companyName, department: ph.department, beneficiary: ph.beneficiary, cycle: ph.cycle, renewalDate: ph.cycle === "one_off" ? null : ph.renewalDate, ownerUserId: ph.ownerUserId, cardLast4: ph.cardLast4, ...common };
     if (await run("phone", () => post("/api/subscriptions/phone", body), t("subs.phoneSaved"))) { setPh(blankPhone); setPhCost({ amount: "", currency: "AED", aedRate: "" }); }
   };
-  const phoneReady = ph.approvedBy.trim().length >= 2 && costOk(phCost) && (ph.mode === "renewal" ? !!ph.subscriptionId : ph.name.trim().length >= 2 && (ph.cycle === "one_off" || !!ph.renewalDate));
+  const phoneReady = ph.approvedBy.trim().length >= 2 && costOk(phCost) && (ph.mode === "renewal" ? !!ph.subscriptionId : ph.name.trim().length >= 2 && !!ph.department && (ph.cycle === "one_off" || !!ph.renewalDate));
 
   return <div className="stack">
     <section className="card" aria-labelledby="subs-h">
@@ -131,6 +132,7 @@ export function SubscriptionsView({ rows, admin, selfId, requests, people }: { r
           <div className="field"><label className="label" htmlFor="ph-name">{t("subs.tool")}</label><input className="input" id="ph-name" required maxLength={160} value={ph.name} onChange={setP("name")} /></div>
           <div className="field"><label className="label" htmlFor="ph-prov">{t("subs.provider")} <span className="opt">· {t("form.optional")}</span></label><input className="input" id="ph-prov" maxLength={120} value={ph.provider} onChange={setP("provider")} /></div>
           <div className="field"><label className="label" htmlFor="ph-co">{t("subs.company")}</label><select className="select" id="ph-co" value={ph.companyName} onChange={setP("companyName")}>{COMPANIES.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+          <div className="field"><label className="label" htmlFor="ph-dep">{t("form.department")}</label><select className="select" id="ph-dep" required value={ph.department} onChange={setP("department")}><option value="" disabled>{t("form.pickDepartment")}</option>{DEPARTMENTS.map(d => <option key={d.en} value={d.en}>{d[locale]}</option>)}</select></div>
           <div className="field"><label className="label" htmlFor="ph-ben">{t("subs.beneficiary")}</label><input className="input" id="ph-ben" list="ph-people" maxLength={160} value={ph.beneficiary} onChange={setP("beneficiary")} /><datalist id="ph-people">{people.map(p => <option key={p.id} value={p.name} />)}</datalist></div>
           <div className="field"><label className="label" htmlFor="ph-owner">{t("subs.owner")}</label><select className="select" id="ph-owner" value={ph.ownerUserId} onChange={setP("ownerUserId")}>{people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
           <div className="field"><label className="label" htmlFor="ph-cycle">{t("subs.cycle")}</label><select className="select" id="ph-cycle" value={ph.cycle} onChange={setP("cycle")}>{CYCLES.map(c => <option key={c} value={c}>{t(`cycle.${c}` as I18nKey)}</option>)}</select></div>

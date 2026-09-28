@@ -163,7 +163,7 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const phoneBase = { approvedBy: z.string().trim().min(2).max(160), approvedOn: date, note: z.string().trim().max(2000).default(""), billedOn: date, actual: costSchema };
 export const phoneSchema = z.discriminatedUnion("mode", [
   z.object({ mode: z.literal("renewal"), subscriptionId: z.string().uuid(), ...phoneBase }),
-  z.object({ mode: z.literal("new"), name: z.string().trim().min(2).max(160), provider: z.string().trim().max(120).default(""), companyName: z.string().trim().min(2).max(160),
+  z.object({ mode: z.literal("new"), name: z.string().trim().min(2).max(160), provider: z.string().trim().max(120).default(""), companyName: z.string().trim().min(2).max(160), department: z.string().trim().min(2).max(120),
     beneficiary: z.string().trim().max(160).default(""), cycle: z.enum(["monthly", "quarterly", "annual", "one_off"]), renewalDate: date.nullable().optional(),
     ownerUserId: z.string().uuid(), cardLast4: z.string().trim().regex(/^(\d{4})?$/, "Card: enter the last 4 digits only").default(""), ...phoneBase }),
 ]);
@@ -178,9 +178,9 @@ export async function recordPhoneApproval(input: z.infer<typeof phoneSchema>, us
       if (input.cycle !== "one_off" && !input.renewalDate) throw new AppError("A renewal date is required for a recurring subscription");
       if (!(await c.query(`SELECT 1 FROM users WHERE id=$1 AND disabled_at IS NULL`, [input.ownerUserId])).rowCount) throw new AppError("Owner not found", 404);
       name = input.name; company = input.companyName; beneficiary = input.beneficiary; card = input.cardLast4; start = input.billedOn; end = input.cycle === "one_off" ? null : input.renewalDate!;
-      subId = (await c.query<{ id: string }>(`INSERT INTO subscriptions(name,provider,company_name,beneficiary,amount_cents,currency,aed_rate,billing_frequency,renewal_date,start_date,card_last4,owner_user_id,status,method,notes)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'active',CASE WHEN $11<>'' THEN 'corporate_card'::payment_method END,$13) RETURNING id`,
-        [name, input.provider, company, beneficiary, cost.cents.toString(), cost.currency, cost.currency === "AED" ? null : cost.rate, input.cycle, end, start, card, input.ownerUserId, `Approved by phone: ${input.approvedBy}, ${input.approvedOn}`])).rows[0].id;
+      subId = (await c.query<{ id: string }>(`INSERT INTO subscriptions(name,provider,company_name,beneficiary,amount_cents,currency,aed_rate,billing_frequency,renewal_date,start_date,card_last4,owner_user_id,status,method,notes,department)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'active','corporate_card'::payment_method,$13,$14) RETURNING id`,
+        [name, input.provider, company, beneficiary, cost.cents.toString(), cost.currency, cost.currency === "AED" ? null : cost.rate, input.cycle, end, start, card, input.ownerUserId, `Approved by phone: ${input.approvedBy}, ${input.approvedOn}`, input.department])).rows[0].id;
     } else {
       const s = (await c.query<{ id: string; name: string; company_name: string; beneficiary: string; card_last4: string; billing_frequency: string; renewal_date: string | null; request_id: string | null; status: string }>(
         `SELECT id,name,company_name,beneficiary,card_last4,billing_frequency::text,to_char(renewal_date,'YYYY-MM-DD') renewal_date,request_id,status::text FROM subscriptions WHERE id=$1 FOR UPDATE`, [input.subscriptionId])).rows[0];

@@ -338,3 +338,14 @@ dl.hbars dt{font-size:14px}dl.hbars dd{margin:0}
 .nav{gap:14px}.nav-group{display:flex;flex-direction:column;gap:2px}
 .nav-head{padding:0 12px 4px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 :root[lang=ar] .nav-head{letter-spacing:0;text-transform:none;font-size:12px}
+
+/* Jira: stacked progress bars (done / in progress / to do), with a 2px surface gap between parts. */
+.jstack{display:flex;gap:2px;height:14px;border-radius:4px;overflow:hidden;background:var(--surface)}
+.jstack span{display:block;height:100%;min-width:0}
+.jstack .d,.jlegend .d{background:var(--good)}.jstack .p,.jlegend .p{background:var(--gold)}.jstack .t,.jlegend .t{background:var(--line)}
+.jlegend span{display:inline-flex;align-items:center;gap:6px}.jlegend i{display:inline-block;width:12px;height:12px;border-radius:3px}
+.jchart{list-style:none;margin:0;padding:0;display:grid;gap:14px}
+.jchart li{display:grid;grid-template-columns:minmax(120px,220px) 1fr 52px;align-items:center;gap:14px}
+.jchart .jpct{text-align:end;font-weight:600}
+@media (max-width:640px){.jchart li{grid-template-columns:1fr 52px}.jchart .jname{grid-column:1 / -1}}
+.jbest{display:flex;flex-wrap:wrap;align-items:center;gap:12px;background:var(--good-soft);border-block:1px solid var(--line)}

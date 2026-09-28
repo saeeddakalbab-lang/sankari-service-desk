@@ -30,6 +30,8 @@ export async function createRequest(input:any,user:User,ipHash:string){
     const rate=currency==="AED"?"1":isRate(given)?given:currency==="USD"?await getUsdToAedRate():null;
     if(!rate)throw new AppError(`Enter the rate: how many AED is 1 ${currency}`);
     input.details.usdToAedRate=rate;input.details.aedRate=rate;
+    // Subscriptions are paid on the corporate card only.
+    input.details.paymentMethod="corporate_card";
     input.details.amountAedCents=toAedCents(cents,currency,rate).toString();
     input.details.amountCents=cents.toString();
   }

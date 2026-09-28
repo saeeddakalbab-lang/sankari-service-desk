@@ -2,7 +2,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect,useMemo,useState } from "react";
-import { useT } from "./I18n";
+import { useLocale, useT } from "./I18n";
+import { DEPARTMENTS } from "@/lib/departments";
 import { IconBack,IconBag,IconChat,IconMail,IconWrench } from "./Icons";
 import { CURRENCIES,formatMoney,isRate,parseAmountToCents,toAedCents } from "@/lib/money";
 import type { Priority } from "@/lib/types";
@@ -15,11 +16,11 @@ const slug=(name:string)=>name.normalize("NFKD").replace(/[̀-ͯ]/g,"").toLowerC
 const initials=(n:string)=>n.split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join("").toUpperCase();
 
 export function RequestForm({kind,userName,domains,defaultDomain,rate,slaHours,needsApproval}:{kind:FormKind;userName:string;domains:string[];defaultDomain:string;rate:string;slaHours:Record<Priority,number>;needsApproval:boolean}){
-  const t=useT(),router=useRouter();
+  const t=useT(),locale=useLocale(),router=useRouter();
   const [busy,setBusy]=useState(false),[error,setError]=useState("");
   const [priority,setPriority]=useState<Priority>("medium");
   const [fullName,setFullName]=useState(""),[local,setLocal]=useState(""),[localTouched,setLocalTouched]=useState(false),[accountType,setAccountType]=useState("employee");
-  const [currency,setCurrency]=useState("USD"),[amount,setAmount]=useState(""),[pay,setPay]=useState("corporate_card");
+  const [currency,setCurrency]=useState("USD"),[amount,setAmount]=useState(""),pay="corporate_card";
   // The rate to AED is the requester's: USD starts from the settings rate, other currencies are typed in.
   const [aedRate,setAedRate]=useState(rate);
   const pickCurrency=(c:string)=>{setCurrency(c);setAedRate(c==="USD"?rate:"");};
@@ -53,7 +54,7 @@ export function RequestForm({kind,userName,domains,defaultDomain,rate,slaHours,n
   }
 
   const org=<div className="grid-2">
-    <div className="field"><label className="label" htmlFor="department">{t("form.department")}</label><input className="input" id="department" name="department" required maxLength={120} autoComplete="organization-title"/></div>
+    <div className="field"><label className="label" htmlFor="department">{t("form.department")}</label><select className="select" id="department" name="department" required defaultValue=""><option value="" disabled>{t("form.pickDepartment")}</option>{DEPARTMENTS.map(d=><option key={d.en} value={d.en}>{d[locale]}</option>)}</select></div>
     <div className="field"><label className="label" htmlFor="company">{t("form.company")}</label><select className="select" id="company" name="company" defaultValue={COMPANIES[0]}>{COMPANIES.map(c=><option key={c}>{c}</option>)}</select></div>
   </div>;
 
@@ -133,9 +134,9 @@ export function RequestForm({kind,userName,domains,defaultDomain,rate,slaHours,n
             <span id="rate-hint" className="hint">{currency==="AED"?t("sub.rateAed"):t("sub.rateOwn",{cur:currency})}</span>
           </fieldset>
           <div className="grid-2">
-            <div className="field"><label className="label" htmlFor="pay">{t("sub.pay")}</label><select className="select" id="pay" value={pay} onChange={e=>setPay(e.target.value)}><option value="corporate_card">{t("pay.card")}</option><option value="bank_transfer">{t("pay.transfer")}</option><option value="online_payment">{t("pay.online")}</option></select></div>
-            {pay==="corporate_card"&&<div className="field"><label className="label" htmlFor="cardLast4">{t("sub.card")}</label>
-              <div className="row" dir="ltr"><span className="mono muted" aria-hidden="true">••••</span><input className="input mono" id="cardLast4" name="cardLast4" inputMode="numeric" maxLength={4} pattern="\d{4}" required autoComplete="off" style={{width:96}} aria-describedby="card-hint"/></div>
+            <div className="field"><span className="label">{t("sub.pay")}</span><p className="soft" style={{margin:0}}>{t("sub.cardOnly")}</p></div>
+            {<div className="field"><label className="label" htmlFor="cardLast4">{t("sub.card")} <span className="opt">· {t("form.optional")}</span></label>
+              <div className="row" dir="ltr"><span className="mono muted" aria-hidden="true">••••</span><input className="input mono" id="cardLast4" name="cardLast4" inputMode="numeric" maxLength={4} pattern="\d{4}" autoComplete="off" style={{width:96}} aria-describedby="card-hint"/></div>
               <span id="card-hint" className="hint">{t("sub.cardHint")}</span></div>}
           </div>
           <div className="field"><label className="label" htmlFor="justification">{t("sub.why")}</label><textarea className="textarea" id="justification" name="justification" rows={4} required maxLength={12000} aria-describedby="why-hint"/><span id="why-hint" className="hint">{t("sub.whyHint")}</span></div>

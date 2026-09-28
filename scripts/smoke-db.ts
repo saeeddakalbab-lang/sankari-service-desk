@@ -1,4 +1,5 @@
 import { getKpis } from "../lib/kpi";
+import { getJiraIssues,getJiraOverview } from "../lib/jira";
 import { pool,query } from "../lib/db";
 
 const requiredTables=["users","requests","comments","audit_log","email_outbox","jira_issues","migration_staging","settings","companies","services","subscriptions","purchase_requests","contracts","contract_line_items","invoices","payables","ledger_entries","contract_assignments"];
@@ -41,5 +42,18 @@ try{
   await invoiceClient.query("ROLLBACK");
   if(e instanceof Error && e.message==="Mismatched installment total was accepted")throw e;
 }finally{invoiceClient.release();}
-console.log("Database migration and KPI queries verified.");
+// The Jira overview is all aggregate SQL: run it empty, then with sample rows (a done issue with a
+// resolution date, an overdue one, an unassigned one with an empty date), then remove the samples.
+for(const d of [30,90,0])await getJiraOverview(d);
+await query(`INSERT INTO jira_issues(issue_key,project_key,summary,status,status_category,assignee_email,assignee_name,due_date,issue_url,raw,jira_updated_at) VALUES
+  ('SMK-1','SMK','a','Done','Done','a@example.test','Smoke A',current_date,'u',$1,now()),
+  ('SMK-2','SMK','b','In Progress','In Progress','a@example.test','Smoke A',current_date-1,'u','{}',now()),
+  ('SMK-3','SMK','c','To Do','To Do',NULL,NULL,NULL,'u',$2,now())`,[JSON.stringify({fields:{resolutiondate:new Date().toISOString().replace("Z","+0000")}}),JSON.stringify({fields:{resolutiondate:""}})]);
+try{
+  const o=await getJiraOverview(30),smk=o.spaces.find(s=>s.key==="SMK"),a=o.team.find(p=>p.email==="a@example.test");
+  if(!smk||smk.total!==3||smk.done!==1||smk.inProgress!==1||smk.todo!==1||smk.overdue!==1)throw new Error(`Jira space counts are wrong: ${JSON.stringify(smk)}`);
+  if(!a||a.doneInPeriod!==1||a.assigned!==2||a.overdue!==1||a.onTime!==1)throw new Error(`Jira team counts are wrong: ${JSON.stringify(a)}`);
+  await getJiraIssues("a@example.test");
+}finally{await query(`DELETE FROM jira_issues WHERE issue_key IN ('SMK-1','SMK-2','SMK-3')`);}
+console.log("Database migration, KPI and Jira queries verified.");
 await pool.end();

@@ -6,7 +6,7 @@ import { AppError, forbidden } from "./errors";
 import { queueMail,queueTicketAlert } from "./mail";
 import { issueTicketLinks } from "./actions";
 import { refFor } from "./format";
-import { usdToAedCents } from "./money";
+import { isRate, toAedCents } from "./money";
 import { getEmailDomains, getUsdToAedRate } from "./settings";
 import { APPROVAL_STATUSES, CLOSED_BY_TYPE, STATUS_BY_TYPE, type RequestRecord, type User } from "./types";
 import { assertStatus } from "./validation";
@@ -25,9 +25,12 @@ export async function createRequest(input:any,user:User,ipHash:string){
   }
   if(input.type==="subscription_approval"&&input.details.amountCents!==undefined){
     // Freeze the exchange rate on the request at submission; later rate changes never rewrite it.
-    const rate=await getUsdToAedRate(),cents=BigInt(input.details.amountCents);
-    input.details.usdToAedRate=rate;
-    input.details.amountAedCents=(input.details.currency==="USD"?usdToAedCents(cents,rate):cents).toString();
+    // AED needs no rate; USD uses the requester's rate or the settings rate; any other currency uses the requester's rate.
+    const currency=String(input.details.currency??"AED"),given=String(input.details.aedRate??""),cents=BigInt(input.details.amountCents);
+    const rate=currency==="AED"?"1":isRate(given)?given:currency==="USD"?await getUsdToAedRate():null;
+    if(!rate)throw new AppError(`Enter the rate: how many AED is 1 ${currency}`);
+    input.details.usdToAedRate=rate;input.details.aedRate=rate;
+    input.details.amountAedCents=toAedCents(cents,currency,rate).toString();
     input.details.amountCents=cents.toString();
   }
   const result=await transaction(async c=>{

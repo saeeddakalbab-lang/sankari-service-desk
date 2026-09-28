@@ -43,8 +43,10 @@ export default async function ContractPrint({ params, searchParams }: { params: 
             <tr><td>{t("adj.discountLine", { p: Number(c.adjustment_bps) / 100 })}</td><td /><td /><td dir="ltr">− {usd(c.discount_cents)}</td></tr></>}
           <tr className="print-total"><td>{t("ct.total")}</td><td /><td /><td dir="ltr">{usd(c.total_cents)}</td></tr></tbody></table>
       <h2 style={{ fontSize: 15, margin: "20px 0 8px" }}>{t("ct.invoices")}</h2>
-      <table className="print-table"><thead><tr><th>{t("ct.ref")}</th><th>{t("ct.invoices")}</th><th>{t("ct.due")}</th><th>{t("ct.amount")}</th></tr></thead>
+      {/* Invoices exist from approval on; before that the page states the payment plan instead of an empty table. */}
+      {d.invoices.length ? <table className="print-table"><thead><tr><th>{t("ct.ref")}</th><th>{t("ct.invoices")}</th><th>{t("ct.due")}</th><th>{t("ct.amount")}</th></tr></thead>
         <tbody>{d.invoices.map(i => <tr key={i.id}><td dir="ltr">{i.reference}</td><td>{t(`ct.inv.${i.installment}` as "ct.inv.signing")}</td><td>{i.due_trigger}</td><td dir="ltr">{usd(i.amount_cents)}</td></tr>)}</tbody></table>
+        : <p>{t("cr.payments")}</p>}
       <h2 style={{ fontSize: 15, margin: "20px 0 8px" }}>{t("ct.requirements")}</h2>
       <p style={{ whiteSpace: "pre-wrap" }}>{c.requirements}</p>
     </>}

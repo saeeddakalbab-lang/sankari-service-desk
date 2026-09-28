@@ -5,7 +5,7 @@ import { PrintButton } from "@/components/PrintButton";
 import { fmtDateTime } from "@/lib/format";
 import { translator } from "@/lib/i18n";
 import { formatMoney } from "@/lib/money";
-import { buildStatement, monthRe } from "@/lib/statements";
+import { buildStatement, getAccounting, monthRe } from "@/lib/statements";
 import { getViewer } from "@/lib/view";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,9 @@ export default async function StatementPrint({ searchParams }: { searchParams: P
   if (!user) redirect("/login");
   if (!(user.roles.includes("admin") || user.roles.includes("accountant"))) redirect("/");
   if (!q.month || !monthRe.test(q.month)) redirect("/admin/statements");
+  // A month before the first statement has nothing to print; open the first one instead of failing.
+  const first = (await getAccounting()).openingMonth;
+  if (q.month < first) redirect(`/admin/statements/print?month=${first}`);
   const s = await buildStatement(q.month), t = translator("ar");
   let bal = BigInt(s.openingAedCents);
   return <div className="print-doc" lang="ar" dir="rtl">

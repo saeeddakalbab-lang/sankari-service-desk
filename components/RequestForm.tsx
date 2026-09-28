@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect,useMemo,useState } from "react";
 import { useT } from "./I18n";
 import { IconBack,IconBag,IconChat,IconMail,IconWrench } from "./Icons";
-import { formatMoney,parseAmountToCents,usdToAedCents } from "@/lib/money";
+import { CURRENCIES,formatMoney,isRate,parseAmountToCents,toAedCents } from "@/lib/money";
 import type { Priority } from "@/lib/types";
 
 export type FormKind="helpdesk"|"email"|"subscription";
@@ -20,10 +20,13 @@ export function RequestForm({kind,userName,domains,defaultDomain,rate,slaHours,n
   const [priority,setPriority]=useState<Priority>("medium");
   const [fullName,setFullName]=useState(""),[local,setLocal]=useState(""),[localTouched,setLocalTouched]=useState(false),[accountType,setAccountType]=useState("employee");
   const [currency,setCurrency]=useState("USD"),[amount,setAmount]=useState(""),[pay,setPay]=useState("corporate_card");
+  // The rate to AED is the requester's: USD starts from the settings rate, other currencies are typed in.
+  const [aedRate,setAedRate]=useState(rate);
+  const pickCurrency=(c:string)=>{setCurrency(c);setAedRate(c==="USD"?rate:"");};
   const [chain,setChain]=useState<Chain>(null);
   useEffect(()=>{if(!needsApproval)return;let live=true;fetch(`/api/approvals/chain?type=${TYPE[kind]}`).then(async r=>{const d=await r.json();if(live)setChain(r.ok?d:{error:d.error});}).catch(()=>live&&setChain({error:t("err.generic")}));return()=>{live=false};},[kind,t,needsApproval]);
   const cents=useMemo(()=>parseAmountToCents(amount),[amount]);
-  const aed=cents===null?null:currency==="USD"?usdToAedCents(cents,rate):cents;
+  const aed=cents===null?null:currency==="AED"?cents:isRate(aedRate)?toAedCents(cents,currency,aedRate):null;
   const emailLocal=localTouched?local:slug(fullName);
 
   async function submit(e:React.FormEvent<HTMLFormElement>){
@@ -37,8 +40,9 @@ export function RequestForm({kind,userName,domains,defaultDomain,rate,slaHours,n
         details:{employeeName:fullName.trim(),jobTitle:s("jobTitle"),accountType,startDate:s("startDate"),endDate:accountType==="contractor"?s("endDate"):"",emailLocal,domain:s("domain"),groups:s("groups"),mobile:s("mobile"),notes:s("notes")}};
     }else{
       if(cents===null){setError(t("err.amount"));return;}
+      if(currency!=="AED"&&!isRate(aedRate)){setError(t("sub.rateMissing",{cur:currency}));return;}
       body={subject:`${s("service")} — ${s("kind")==="seats"?`+${s("seats")}`:s("seats")} × ${t(`cycle.${s("cycle")}` as never)}`.slice(0,200),description:s("justification"),priority:"medium",
-        details:{service:s("service"),kind:s("kind"),seats:s("seats"),billingCycle:s("cycle"),currency,amountCents:Number(cents),paymentMethod:pay,cardLast4:pay==="corporate_card"?s("cardLast4").replace(/\D/g,""):"",businessJustification:s("justification")}};
+        details:{service:s("service"),kind:s("kind"),seats:s("seats"),billingCycle:s("cycle"),currency,aedRate:currency==="AED"?"":aedRate,amountCents:Number(cents),paymentMethod:pay,cardLast4:pay==="corporate_card"?s("cardLast4").replace(/\D/g,""):"",businessJustification:s("justification")}};
     }
     setBusy(true);
     try{
@@ -120,12 +124,13 @@ export function RequestForm({kind,userName,domains,defaultDomain,rate,slaHours,n
           <fieldset className="stack-s"><legend className="label" style={{marginBottom:6}}>{t("sub.cost")}</legend>
             <div className="row" style={{alignItems:"stretch"}} dir="ltr">
               <label className="sr-only" htmlFor="currency">{t("sub.currency")}</label>
-              <select className="select mono" id="currency" style={{width:96}} value={currency} onChange={e=>setCurrency(e.target.value)}><option>USD</option><option>AED</option></select>
+              <select className="select mono" id="currency" style={{width:96}} value={currency} onChange={e=>pickCurrency(e.target.value)}>{CURRENCIES.map(c=><option key={c}>{c}</option>)}</select>
               <label className="sr-only" htmlFor="amount">{t("sub.amount")}</label>
               <input className="input mono" id="amount" inputMode="decimal" required style={{width:200,textAlign:"right"}} value={amount} onChange={e=>setAmount(e.target.value)} aria-invalid={amount!==""&&cents===null} aria-describedby="aed-live rate-hint"/>
               <div id="aed-live" className="live-aed" aria-live="polite"><span style={{fontSize:13}}>≈</span><span>{aed===null?"AED —":formatMoney(aed,"AED")}</span></div>
             </div>
-            <span id="rate-hint" className="hint">{t("sub.rate",{rate})}</span>
+            {currency!=="AED"&&<div className="field" style={{maxWidth:260}}><label className="label" htmlFor="aedRate">{t("sub.rateField",{cur:currency})}</label><input className="input mono" id="aedRate" dir="ltr" inputMode="decimal" required value={aedRate} onChange={e=>setAedRate(e.target.value.replace(/[^d.]/g,""))} aria-invalid={aedRate!==""&&!isRate(aedRate)} aria-describedby="rate-hint"/></div>}
+            <span id="rate-hint" className="hint">{currency==="AED"?t("sub.rateAed"):t("sub.rateOwn",{cur:currency})}</span>
           </fieldset>
           <div className="grid-2">
             <div className="field"><label className="label" htmlFor="pay">{t("sub.pay")}</label><select className="select" id="pay" value={pay} onChange={e=>setPay(e.target.value)}><option value="corporate_card">{t("pay.card")}</option><option value="bank_transfer">{t("pay.transfer")}</option><option value="online_payment">{t("pay.online")}</option></select></div>

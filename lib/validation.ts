@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isRate } from "./money";
 import { PRIORITIES, REQUEST_TYPES, ROLES, STATUS_BY_TYPE, type RequestType } from "./types";
 
 const clean=(max:number)=>z.string().trim().min(1).max(max).transform(v=>v.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,""));
@@ -15,7 +16,10 @@ export const createRequestSchema=z.object({
     if(!String(d.service||"").trim())issue("service","Service name is required");
     if(d.cardLast4!==undefined&&d.cardLast4!==""&&!/^\d{4}$/.test(String(d.cardLast4)))issue("cardLast4","Enter only the last 4 digits of the card");
     if(d.amountCents!==undefined&&!(Number.isSafeInteger(d.amountCents)&&(d.amountCents as number)>=0))issue("amountCents","Amount is invalid");
-    if(d.currency!==undefined&&!["USD","AED"].includes(String(d.currency)))issue("currency","Currency must be USD or AED");
+    // Any 3-letter currency. Anything but AED needs the rate to AED the requester entered (USD may use the settings rate).
+    if(d.currency!==undefined&&!/^[A-Z]{3}$/.test(String(d.currency)))issue("currency","Currency: a 3-letter code such as AED, USD, EUR");
+    if(d.aedRate!==undefined&&d.aedRate!==""&&!isRate(String(d.aedRate)))issue("aedRate","Rate: how many AED is 1 unit, e.g. 3.6725");
+    if(d.currency!==undefined&&!["AED","USD"].includes(String(d.currency))&&!isRate(String(d.aedRate??"")))issue("aedRate",`Enter the rate: how many AED is 1 ${String(d.currency)}`);
   }
   if(v.type==="helpdesk_ticket"&&!String(d.category||"").trim())issue("category","Category is required");
   if(v.type==="email_account_request"){

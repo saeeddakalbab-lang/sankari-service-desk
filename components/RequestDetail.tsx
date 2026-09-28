@@ -109,7 +109,7 @@ export function RequestDetail({request:initial,refCode,line,decisions,comments:i
         <aside className="card card-pad stack" aria-labelledby="det-h">
           <h2 id="det-h">{t("det.details")}</h2>
           <div className={`sla ${slaTone}`}>
-            <div className="row" style={{justifyContent:"space-between"}}><strong style={{fontSize:14}}>{t("det.sla",{h:total})}</strong><span className="mono" style={{fontSize:14}}>{left>=0?t("det.left",{h:left}):t("det.over",{h:-left})}</span></div>
+            <div className="row" style={{justifyContent:"space-between"}}><strong style={{fontSize:14}}>{t("det.sla",{h:total})}</strong><span className="mono" style={{fontSize:14}}>{request.resolved_at?(left>=0?t("det.met",{h:used}):t("det.missed",{h:-left})):left>=0?t("det.left",{h:left}):t("det.over",{h:-left})}</span></div>
             <div className="meter" role="meter" aria-label={t("det.sla",{h:total})} aria-valuemin={0} aria-valuemax={total} aria-valuenow={Math.min(used,total)} aria-valuetext={t("det.slaUsed",{u:used,t:total})}><div style={{width:`${Math.min(100,Math.round(used/total*100))}%`}}/></div>
             <div style={{fontSize:13}}>{t("det.due")} <bdi className="mono">{fmtDateTime(request.sla_due_at)}</bdi></div>
           </div>

@@ -5,9 +5,10 @@ import { query,transaction } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { PERSON_TYPES,SINGLE_HOLDER,placeholderName,rolesForType } from "@/lib/people";
 import { getEmailDomains } from "@/lib/settings";
+import { queueInvitation } from "@/lib/invite-send";
 export const dynamic="force-dynamic";
 
-const addSchema=z.object({email:z.string().trim().toLowerCase().email().max(254),name:z.string().trim().max(120).optional(),type:z.enum(PERSON_TYPES),managerUserId:z.string().uuid().nullable().optional(),confirmMove:z.boolean().optional()});
+const addSchema=z.object({email:z.string().trim().toLowerCase().email().max(254),name:z.string().trim().max(120).optional(),type:z.enum(PERSON_TYPES),managerUserId:z.string().uuid().nullable().optional(),confirmMove:z.boolean().optional(),sendInvite:z.boolean().optional().default(true)});
 
 // Everyone who could not submit a subscription today: no manager, not a manager, not the CEO.
 export async function GET(){const auth=await authorize(["admin"]);if(auth.error)return auth.error;
@@ -18,7 +19,7 @@ export async function GET(){const auth=await authorize(["admin"]);if(auth.error)
 // Add a person before their first sign-in. The role sits on the email, so their first Google
 // sign-in links to this row and opens on the right home screen.
 export async function POST(req:NextRequest){const limited=await rateLimit(req,"people");if(limited)return limited;const auth=await authorize(["admin"]);if(auth.error)return auth.error;try{
-  const {email,name,type,managerUserId,confirmMove}=addSchema.parse(await req.json());
+  const {email,name,type,managerUserId,confirmMove,sendInvite}=addSchema.parse(await req.json());
   const domain=email.split("@")[1],{domains}=await getEmailDomains(),allowed=new Set([...domains,(process.env.GOOGLE_WORKSPACE_DOMAIN||"sankari-holding.com").toLowerCase()]);
   if(!allowed.has(domain))throw new AppError(`${domain} is not one of the company's Workspace domains`);
   const saved=await transaction(async c=>{
@@ -35,4 +36,6 @@ export async function POST(req:NextRequest){const limited=await rateLimit(req,"p
     return {user:r.rows[0],movedFrom:moved?.email??null};
   });
   if("needsConfirm" in saved)return NextResponse.json({error:`${saved.current} already holds this role. Confirm to move it.`,needsConfirm:true,current:saved.current},{status:409});
-  return NextResponse.json(saved,{status:201});}catch(e){return jsonError(e);}}
+  // The invitation goes after the person is saved, so a mail problem never loses the account.
+  const invited=sendInvite?(await queueInvitation(saved.user.id,auth.user,ipHash(req))).sent:false;
+  return NextResponse.json({...saved,invited},{status:201});}catch(e){return jsonError(e);}}

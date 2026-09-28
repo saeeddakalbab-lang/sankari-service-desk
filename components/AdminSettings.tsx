@@ -9,7 +9,7 @@ import type { Rules } from "@/lib/rules";
 import type { Role,Theme } from "@/lib/types";
 
 type U={id:string;name:string;email:string;roles:Role[];manager_user_id:string|null;disabled_at:string|null;invited_at?:string|null;email_verified?:string|null};
-const TYPES=["employee","manager","ceo","owner","board","admin","agent"] as const;
+const TYPES=["employee","manager","ceo","owner","board","admin","agent","accountant","contracts"] as const;
 const PRESETS=[["Terracotta","#B84F27"],["Teal","#1D5F70"],["Green","#20744F"],["Blue","#2C5C8F"]] as const;
 const BASIC:Role[]=["employee","manager","agent","admin","dev","accountant","contracts"];
 
@@ -35,8 +35,8 @@ export function AdminSettings({accent:initialAccent,defaultTheme:initialTheme,do
   const holder=(r:Role)=>active.find(u=>u.roles.includes(r));
   const patch=async(u:U,roles:Role[],managerUserId?:string|null)=>{const d=await send("/api/users","PATCH",{id:u.id,roles,...(managerUserId!==undefined?{managerUserId}:{})});setUsers(prev=>prev.map(x=>x.id===u.id?{...x,roles:d.roles,manager_user_id:d.manager_user_id}:x));};
   // Moving a single-holder role: take it off the current holder first, so the one-CEO / one-Owner rule never trips.
-  const [pEmail,setPEmail]=useState(""),[pName,setPName]=useState(""),[pType,setPType]=useState<(typeof TYPES)[number]>("employee"),[pManager,setPManager]=useState("");
-  const addPerson=()=>run("add",async()=>{const body={email:pEmail,name:pName||undefined,type:pType,managerUserId:pManager||null};
+  const [pEmail,setPEmail]=useState(""),[pName,setPName]=useState(""),[pType,setPType]=useState<(typeof TYPES)[number]>("employee"),[pManager,setPManager]=useState(""),[pInvite,setPInvite]=useState(true);
+  const addPerson=()=>run("add",async()=>{const body={email:pEmail,name:pName||undefined,type:pType,managerUserId:pManager||null,sendInvite:pInvite};
     const post=(b:object)=>fetch("/api/admin/people",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
     let r=await post(body),d=await r.json();
     if(r.status===409&&d.needsConfirm){if(!window.confirm(t("people.confirmMove",{who:d.current})))throw new Error(d.error);r=await post({...body,confirmMove:true});d=await r.json();}
@@ -116,6 +116,7 @@ export function AdminSettings({accent:initialAccent,defaultTheme:initialTheme,do
         <div className="field"><label className="label" htmlFor="p-type">{t("people.type")}</label><select className="select" id="p-type" value={pType} onChange={e=>setPType(e.target.value as (typeof TYPES)[number])}>{TYPES.map(x=><option key={x} value={x}>{t(`ptype.${x}` as I18nKey)}</option>)}</select></div>
         <div className="field"><label className="label" htmlFor="p-mgr">{t("adm.reportsTo")}</label><select className="select" id="p-mgr" value={pManager} onChange={e=>setPManager(e.target.value)}><option value="">{t("adm.noManager")}</option>{active.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></div>
       </div>
+      <label className="choice compact" style={{alignSelf:"flex-start"}}><input type="checkbox" checked={pInvite} onChange={e=>setPInvite(e.target.checked)}/>{t("people.sendInvite")}</label>
       <Msg area="add"/>
       <div><button type="button" className="btn btn-primary" disabled={!pEmail.includes("@")} onClick={addPerson}>{t("people.addBtn")}</button></div>
       <div className="stack-s" style={{paddingTop:12,borderTop:"1px solid var(--line)"}}><h3>{t("people.gaps")}</h3><p className="soft" style={{fontSize:13}}>{t("people.gapsLead")}</p>
@@ -138,19 +139,19 @@ export function AdminSettings({accent:initialAccent,defaultTheme:initialTheme,do
       <h3>{t("adm.roles")}</h3>
       <div className="table-wrap"><table className="table">
         <thead><tr><th scope="col">{t("adm.person")}</th><th scope="col">{t("adm.rolesCol")}</th><th scope="col">{t("adm.reportsTo")}</th><th scope="col"><span className="sr-only">{t("adm.saveRow")}</span></th></tr></thead>
-        <tbody>{active.map(u=><PersonRow key={u.id} u={u} users={active} selfId={selfId} t={t} onSave={(roles,m)=>run("people",()=>patch(u,roles,m))}/>)}</tbody>
+        <tbody>{active.map(u=><PersonRow key={u.id} u={u} users={active} selfId={selfId} t={t} onSave={(roles,m)=>run("people",()=>patch(u,roles,m))} onResend={x=>run("people",async()=>{await send("/api/admin/people/invite","POST",{id:x.id});})}/>)}</tbody>
       </table></div>
     </section>
   </div>;
 }
 
-function PersonRow({u,users,selfId,t,onSave}:{u:U;users:U[];selfId:string;t:ReturnType<typeof useT>;onSave:(roles:Role[],manager:string|null)=>void}){
+function PersonRow({u,users,selfId,t,onSave,onResend}:{u:U;users:U[];selfId:string;t:ReturnType<typeof useT>;onSave:(roles:Role[],manager:string|null)=>void;onResend:(u:U)=>void}){
   const [roles,setRoles]=useState<Role[]>(u.roles),[manager,setManager]=useState(u.manager_user_id||"");
   const special=u.roles.filter(r=>!BASIC.includes(r));
   const isManager=users.some(x=>x.manager_user_id===u.id);
   const noApprover=!manager&&!u.roles.includes("ceo")&&!isManager;
   return <tr>
-    <td><strong style={{fontWeight:600}}>{u.name}</strong><br/><span className="soft mono" style={{fontSize:12}} dir="ltr">{u.email}</span>{(special.length>0||(u.invited_at&&!u.email_verified))&&<div className="row" style={{marginTop:4}}>{special.map(r=><span key={r} className="pill neutral">{t(`role.${r}` as I18nKey)}</span>)}{u.invited_at&&!u.email_verified&&<span className="pill info">{t("people.invited")}</span>}</div>}</td>
+    <td><strong style={{fontWeight:600}}>{u.name}</strong><br/><span className="soft mono" style={{fontSize:12}} dir="ltr">{u.email}</span>{(special.length>0||(u.invited_at&&!u.email_verified))&&<div className="row" style={{marginTop:4}}>{special.map(r=><span key={r} className="pill neutral">{t(`role.${r}` as I18nKey)}</span>)}{u.invited_at&&!u.email_verified&&<><span className="pill info">{t("people.invited")}</span><button type="button" className="btn btn-small btn-outline" onClick={()=>onResend(u)}>{t("people.resend")}</button></>}</div>}</td>
     <td><div className="role-grid">{BASIC.map(r=><label key={r}><input type="checkbox" checked={roles.includes(r)} disabled={r==="employee"||(r==="admin"&&u.id===selfId)} onChange={e=>setRoles(e.target.checked?[...roles,r]:roles.filter(x=>x!==r))}/>{t(`role.${r}` as I18nKey)}</label>)}</div></td>
     <td><label className="sr-only" htmlFor={`m-${u.id}`}>{t("adm.reportsTo")} · {u.name}</label><select className="select" id={`m-${u.id}`} style={{minWidth:220}} value={manager} onChange={e=>setManager(e.target.value)}><option value="">{t("adm.noManager")}</option>{users.filter(x=>x.id!==u.id).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>{noApprover&&<div className="hint" style={{color:"var(--gold-ink)",marginTop:4}}>{t("adm.noManagerWarn")}</div>}</td>
     <td><button type="button" className="btn btn-outline btn-small" onClick={()=>onSave([...new Set([...roles.filter(r=>BASIC.includes(r)),...u.roles.filter(r=>!BASIC.includes(r))])],manager||null)}>{t("adm.saveRow")}</button></td>

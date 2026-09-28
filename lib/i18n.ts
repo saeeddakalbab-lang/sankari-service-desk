@@ -649,6 +649,10 @@ const en = {
   "nav.prices": "Price list",
   "nav.contractDetails": "Contract details",
   "pr.lead": "What each service costs in a contract: (base salary + flat cost) × multiplier for a full month. Changes apply to new requests only and are audited.",
+  "people.sendInvite": "Send an invitation email",
+  "people.resend": "Resend invitation",
+  "ptype.accountant": "Accountant",
+  "ptype.contracts": "Contracts",
   "q.title": "Team queue", "q.lead": "Every request. Assign work, update status and keep the history accurate.",
   "q.total": "Total", "q.open": "Open", "q.overdue": "Overdue", "q.unassigned": "Unassigned",
 
@@ -1293,6 +1297,10 @@ const ar: Record<Key, string> = {
   "nav.prices": "قائمة الأسعار",
   "nav.contractDetails": "بيانات العقود",
   "pr.lead": "تكلفة كل خدمة في العقد: (الراتب الأساسي + التكلفة الثابتة) × المعامل لشهر كامل. تسري التعديلات على الطلبات الجديدة فقط وتُسجَّل في سجل التدقيق.",
+  "people.sendInvite": "إرسال بريد دعوة",
+  "people.resend": "إعادة إرسال الدعوة",
+  "ptype.accountant": "محاسب",
+  "ptype.contracts": "العقود",
   "q.title": "قائمة الفريق", "q.lead": "كل الطلبات. أسند العمل وحدّث الحالة وحافظ على دقة السجل.",
   "q.total": "الإجمالي", "q.open": "مفتوحة", "q.overdue": "متأخرة", "q.unassigned": "غير مُسندة",
 

@@ -78,8 +78,8 @@ export function JiraDashboard() {
             {open === s.key && <tr><td colSpan={8} style={{ background: "var(--bg)" }}>
               <table className="table" aria-label={t("jr.peopleIn", { name: s.name })}>
                 <thead><tr><th scope="col">{t("jr.person")}</th><th scope="col" className="num">{t("jr.assigned")}</th><th scope="col" className="num">{t("jr.done")}</th><th scope="col" className="num">{t("jr.inProgress")}</th><th scope="col" className="num">{t("jr.todo")}</th><th scope="col">{t("jr.complete")}</th><th scope="col" className="num">{t("jr.overdue")}</th></tr></thead>
-                <tbody>{s.assignees.map(a => <tr key={a.email ?? "none"}>
-                  <th scope="row" className={a.email ? "" : "soft"} style={{ fontWeight: 500 }}>{a.email ? a.name || a.email : t("jr.unassigned")}</th>
+                <tbody>{s.assignees.map(a => <tr key={a.id ?? "none"}>
+                  <th scope="row" className={a.id ? "" : "soft"} style={{ fontWeight: 500 }}>{a.id ? a.name || a.id : t("jr.unassigned")}</th>
                   <td className="num">{a.total}</td><td className="num">{a.done}</td><td className="num">{a.inProgress}</td><td className="num">{a.todo}</td>
                   <td style={{ minWidth: 120 }}><div className="row" style={{ gap: 8 }}><div style={{ flex: 1 }}><Bar s={a} /></div><span className="mono">{pct(a.done, a.total)}%</span></div></td>
                   <td className="num" style={a.overdue ? { color: "var(--bad-ink)" } : undefined}>{a.overdue}</td>
@@ -96,14 +96,14 @@ export function JiraDashboard() {
         </div>
         {best && <div className="card-pad jbest" role="status">
           <span className="pill good">★ {t("jr.best")}</span>
-          <strong style={{ fontSize: 18 }}>{best.name || best.email}</strong>
+          <strong style={{ fontSize: 18 }}>{best.name || best.id}</strong>
           <span className="soft">{t("jr.bestWhy", { n: best.doneInPeriod, period, ot: best.withDue ? `${pct(best.onTime, best.withDue)}%` : "—" })}</span>
         </div>}
         <div className="table-wrap"><table className="table">
           <thead><tr><th scope="col" className="num">#</th><th scope="col">{t("jr.person")}</th><th scope="col" className="num">{t("jr.doneIn", { period })}</th><th scope="col" className="num">{t("jr.assigned")}</th><th scope="col">{t("jr.complete")}</th><th scope="col" className="num">{t("jr.onTime")}</th><th scope="col" className="num">{t("jr.openNow")}</th><th scope="col" className="num">{t("jr.overdue")}</th><th scope="col">{t("jr.spaces")}</th></tr></thead>
-          <tbody>{data.team.map((p, i) => <tr key={p.email}>
+          <tbody>{data.team.map((p, i) => <tr key={p.id}>
             <td className="num mono">{i + 1}</td>
-            <th scope="row" style={{ fontWeight: 600 }}>{p.name || p.email}{p === best && <span className="pill good" style={{ marginInlineStart: 8 }}>★</span>}</th>
+            <th scope="row" style={{ fontWeight: 600 }}>{p.name || p.id}{p === best && <span className="pill good" style={{ marginInlineStart: 8 }}>★</span>}</th>
             <td className="num" style={{ fontWeight: 600 }}>{p.doneInPeriod}</td><td className="num">{p.assigned}</td>
             <td><span className="mono">{pct(p.done, p.assigned)}%</span></td>
             <td className="num mono">{p.withDue ? `${pct(p.onTime, p.withDue)}%` : "—"}</td>

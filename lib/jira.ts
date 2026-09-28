@@ -14,29 +14,31 @@ export async function syncJira(){if(!configured())return {configured:false,synce
  await query(`INSERT INTO system_state(key,value) VALUES('jira_sync',$1) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=now()`,[JSON.stringify({synced,at:new Date().toISOString()})]);return {configured:true,synced};}
 
 const allowedFor=(email?:string)=>{const allowed=csv(process.env.JIRA_ALLOWED_EMAILS);if(email&&allowed.size&&!allowed.has(email.toLowerCase()))throw new Error("Jira dashboard access is not configured for this account");};
-export async function getJiraIssues(email?:string){allowedFor(email);const r=await query(`SELECT issue_key,project_key,summary,status,status_category,assignee_name,priority,to_char(due_date,'YYYY-MM-DD') due_date,issue_url FROM jira_issues ${email?"WHERE assignee_email=lower($1)":""} ORDER BY (status_category='Done'),due_date NULLS LAST,jira_updated_at DESC LIMIT 500`,email?[email]:[]);return {configured:configured(),projects:jiraProjects(),issues:r.rows};}
+export async function getJiraIssues(email?:string,name?:string){allowedFor(email);const me=!!email;const r=await query(`SELECT issue_key,project_key,summary,status,status_category,assignee_name,priority,to_char(due_date,'YYYY-MM-DD') due_date,issue_url FROM jira_issues ${me?"WHERE assignee_email=lower($1) OR (coalesce($2,'')<>'' AND lower(assignee_name)=lower($2))":""} ORDER BY (status_category='Done'),due_date NULLS LAST,jira_updated_at DESC LIMIT 500`,me?[email,name??""]:[]);return {configured:configured(),projects:jiraProjects(),issues:r.rows};}
 
 // The overview: progress per space, who works in each, and a team ranking. Everything is counted in
 // the database, so the page gets totals, not 1,300 issues. An issue is "done" when Jira's status
 // category is Done; it was finished at its resolution date (or, for issues synced before that field
 // was pulled, its last update). Overdue = not done and past its due date.
 export type JiraCounts={total:number;done:number;inProgress:number;todo:number;overdue:number};
-export type JiraSpace=JiraCounts&{key:string;name:string;people:number;assignees:(JiraCounts&{name:string;email:string|null})[]};
-export type JiraPerson={name:string;email:string;assigned:number;done:number;doneInPeriod:number;open:number;overdue:number;withDue:number;onTime:number;spaces:string[]};
+export type JiraSpace=JiraCounts&{key:string;name:string;people:number;assignees:(JiraCounts&{name:string;id:string|null})[]};
+export type JiraPerson={name:string;id:string;assigned:number;done:number;doneInPeriod:number;open:number;overdue:number;withDue:number;onTime:number;spaces:string[]};
 const DONE=`status_category='Done'`,PROG=`status_category='In Progress'`;
 const COUNTS=`count(*)::int total,count(*) FILTER (WHERE ${DONE})::int done,count(*) FILTER (WHERE ${PROG})::int "inProgress",
   count(*) FILTER (WHERE NOT (${DONE}) AND NOT (${PROG}))::int todo,count(*) FILTER (WHERE NOT (${DONE}) AND due_date<current_date)::int overdue`;
+// Jira Cloud hides people's email addresses, so a person is their Jira account id (then email, then name).
+const WHO=`coalesce(raw->'fields'->'assignee'->>'accountId',assignee_email,assignee_name)`;
 const COMPLETED=`coalesce(nullif(raw->'fields'->>'resolutiondate','')::timestamptz,jira_updated_at)`;
 export async function getJiraOverview(days:number){
   const names=(await query<{value:Record<string,string>}>(`SELECT value FROM system_state WHERE key='jira_projects'`)).rows[0]?.value??{};
-  const spaces=(await query<JiraCounts&{key:string;people:number}>(`SELECT project_key key,${COUNTS},count(DISTINCT assignee_email)::int people FROM jira_issues GROUP BY 1`)).rows;
-  const people=(await query<JiraCounts&{key:string;name:string;email:string|null}>(`SELECT project_key key,coalesce(max(assignee_name),'') name,assignee_email email,${COUNTS} FROM jira_issues GROUP BY 1,3 ORDER BY 1,count(*) FILTER (WHERE ${DONE}) DESC`)).rows;
+  const spaces=(await query<JiraCounts&{key:string;people:number}>(`SELECT project_key key,${COUNTS},count(DISTINCT ${WHO})::int people FROM jira_issues GROUP BY 1`)).rows;
+  const people=(await query<JiraCounts&{key:string;name:string;id:string|null}>(`SELECT project_key key,coalesce(max(assignee_name),'') name,${WHO} id,${COUNTS} FROM jira_issues GROUP BY 1,3 ORDER BY 1,count(*) FILTER (WHERE ${DONE}) DESC`)).rows;
   const since=days>0?`AND ${COMPLETED}>=now()-make_interval(days=>$1::int)`:"";
-  const team=(await query<JiraPerson>(`SELECT max(assignee_name) name,assignee_email email,count(*)::int assigned,count(*) FILTER (WHERE ${DONE})::int done,
+  const team=(await query<JiraPerson>(`SELECT coalesce(max(assignee_name),max(assignee_email),'') name,${WHO} id,count(*)::int assigned,count(*) FILTER (WHERE ${DONE})::int done,
       count(*) FILTER (WHERE ${DONE} ${since})::int "doneInPeriod",count(*) FILTER (WHERE NOT (${DONE}))::int open,
       count(*) FILTER (WHERE NOT (${DONE}) AND due_date<current_date)::int overdue,count(*) FILTER (WHERE ${DONE} AND due_date IS NOT NULL)::int "withDue",
       count(*) FILTER (WHERE ${DONE} AND due_date IS NOT NULL AND ${COMPLETED}::date<=due_date)::int "onTime",array_agg(DISTINCT project_key) spaces
-    FROM jira_issues WHERE assignee_email IS NOT NULL GROUP BY assignee_email`,days>0?[days]:[])).rows;
+    FROM jira_issues WHERE ${WHO} IS NOT NULL GROUP BY 2`,days>0?[days]:[])).rows;
   // Best first: most finished in the period, then the better on-time rate, then the better completion rate.
   const rate=(a:number,b:number)=>b?a/b:0;
   team.sort((a,b)=>b.doneInPeriod-a.doneInPeriod||rate(b.onTime,b.withDue)-rate(a.onTime,a.withDue)||rate(b.done,b.assigned)-rate(a.done,a.assigned));

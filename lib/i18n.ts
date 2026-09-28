@@ -645,6 +645,10 @@ const en = {
   "st2.delete": "Delete",
   "st2.deleteReason": "Why delete {ref}? A copy is kept in the audit log.",
   "st2.deleteReasonShort": "Give a reason of at least 3 characters.",
+  "navg.contracts": "Contracts",
+  "nav.prices": "Price list",
+  "nav.contractDetails": "Contract details",
+  "pr.lead": "What each service costs in a contract: (base salary + flat cost) × multiplier for a full month. Changes apply to new requests only and are audited.",
   "q.title": "Team queue", "q.lead": "Every request. Assign work, update status and keep the history accurate.",
   "q.total": "Total", "q.open": "Open", "q.overdue": "Overdue", "q.unassigned": "Unassigned",
 
@@ -1285,6 +1289,10 @@ const ar: Record<Key, string> = {
   "st2.delete": "حذف",
   "st2.deleteReason": "لماذا تحذف {ref}؟ تُحفظ نسخة في سجل التدقيق.",
   "st2.deleteReasonShort": "اكتب سببًا من 3 أحرف على الأقل.",
+  "navg.contracts": "العقود",
+  "nav.prices": "قائمة الأسعار",
+  "nav.contractDetails": "بيانات العقود",
+  "pr.lead": "تكلفة كل خدمة في العقد: (الراتب الأساسي + التكلفة الثابتة) × المعامل لشهر كامل. تسري التعديلات على الطلبات الجديدة فقط وتُسجَّل في سجل التدقيق.",
   "q.title": "قائمة الفريق", "q.lead": "كل الطلبات. أسند العمل وحدّث الحالة وحافظ على دقة السجل.",
   "q.total": "الإجمالي", "q.open": "مفتوحة", "q.overdue": "متأخرة", "q.unassigned": "غير مُسندة",
 

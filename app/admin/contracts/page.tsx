@@ -33,7 +33,7 @@ export default async function ContractsPage() {
           </tr>)}</tbody>
         </table></div> : <p className="card-pad soft">{t("ct.none")}</p>}
       </section>
-      <PriceList pricing={JSON.parse(JSON.stringify(pricing))} canEdit={false} editHref={user.roles.includes("admin") ? "/admin/settings#prices" : undefined} />
+      <PriceList pricing={JSON.parse(JSON.stringify(pricing))} canEdit={false} editHref={user.roles.includes("admin") || user.roles.includes("contracts") ? "/admin/contracts/prices" : undefined} />
     </div>
   </ProtectedPage>;
 }

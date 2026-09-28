@@ -13,8 +13,8 @@ export const initials=(n:string)=>n.split(/\s+/).filter(Boolean).slice(0,2).map(
 const rolePriority:Role[]=["ceo","owner","admin","board","agent","dev","accountant","contracts","employee"];
 
 // The menu shows only what this person can use; every page and API still checks the role on the server.
-type Group="requests"|"work"|"finance"|"oversight"|"settings";
-const GROUPS:Group[]=["requests","work","finance","oversight","settings"];
+type Group="requests"|"work"|"contracts"|"finance"|"oversight"|"settings";
+const GROUPS:Group[]=["requests","work","contracts","finance","oversight","settings"];
 
 export function AppShell({user,approvals,ownsSubs=false,children}:{user:User;approvals:{show:boolean;count:number};ownsSubs?:boolean;children:React.ReactNode}){
   const t=useT(),path=usePathname()||"",has=(r:readonly Role[])=>r.some(x=>user.roles.includes(x));
@@ -25,9 +25,13 @@ export function AppShell({user,approvals,ownsSubs=false,children}:{user:User;app
     {href:"/approvals",label:t("nav.approvals"),icon:<IconCheckSquare/>,group:"requests",show:approvals.show,badge:approvals.count},
     {href:"/admin",label:t("nav.queue"),icon:<IconQueue/>,group:"work",show:has(["agent","admin"]),match:p=>p==="/admin"},
     {href:"/subscriptions",label:t("nav.subs"),icon:<IconRepeat/>,group:"work",show:ownsSubs||has(["admin"])},
+    // Contracts: everything about client contracts, for admins and the Contracts role. Accountants
+    // reach a contract's invoices from Accounting; they don't run contracts.
+    {href:"/admin/contracts",label:t("nav.contracts"),icon:<IconCheckSquare/>,group:"contracts",show:has(["admin","contracts"]),match:p=>p==="/admin/contracts"||/^\/admin\/contracts\/[0-9a-f-]{36}/.test(p)},
+    {href:"/admin/contracts/prices",label:t("nav.prices"),icon:<IconReceipt/>,group:"contracts",show:has(["admin","contracts"])},
+    {href:"/admin/contracts/settings",label:t("nav.contractDetails"),icon:<IconGear/>,group:"contracts",show:has(["admin","contracts"])},
     {href:"/admin/bills",label:t("nav.bills"),icon:<IconReceipt/>,group:"finance",show:has(["admin","accountant"])},
     {href:"/admin/statements",label:t("nav.statements"),icon:<IconList/>,group:"finance",show:has(["admin","accountant"])},
-    {href:"/admin/contracts",label:t("nav.contracts"),icon:<IconCheckSquare/>,group:"finance",show:has(["admin","contracts","accountant"]),match:p=>p.startsWith("/admin/contracts")},
     {href:"/admin/ledger",label:t("nav.ledger"),icon:<IconChart/>,group:"finance",show:has(["admin","accountant"])},
     {href:"/oversight",label:t("nav.stuck"),icon:<IconClock/>,group:"oversight",show:has(OVERSIGHT_ROLES)},
     {href:"/dashboard/kpi",label:t("nav.kpi"),icon:<IconChart/>,group:"oversight",show:has(OVERSIGHT_ROLES)},

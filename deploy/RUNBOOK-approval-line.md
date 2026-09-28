@@ -423,3 +423,27 @@ Same routine: dump with `STEP=018`, then deploy.
 | Migration | What it does | Rollback |
 |---|---|---|
 | `018_tighten_contract_checks.sql` | Rewrites `contract_lines_weeks_valid` and `contracts_adjustment_valid` so a line cannot have weeks without days and a contract cannot carry a percentage without a kind (a CHECK that evaluates to NULL passes; the CI guard run caught both). If an existing row breaks the rule it stops and names the rows; it never changes data. | `db/rollback/018_tighten_contract_checks.down.sql`: restores the looser checks. |
+
+# Step Q: contract documents and invoices (migration 019)
+
+Same routine: dump with `STEP=019`, rehearse on the restored copy, then deploy the site **and** the
+worker (the worker sends the midpoint and final invoice emails).
+
+| Migration | What it does | Rollback |
+|---|---|---|
+| `019_contract_client_details.sql` | Adds `contracts.client_details` (jsonb, default `{}`) for the client's legal name, registry and tax numbers, signatory's title, address, city, sites and coverage hours, and freezes it with the price once a contract is approved. Existing contracts keep `{}` and print `[●]` where a detail is missing. No row is changed. | `db/rollback/019_contract_client_details.down.sql`: refuses once any contract holds details; otherwise restores the 015 guard and drops the column. |
+
+After deploy:
+
+1. Admin settings → **Sankari details on contracts and invoices**: fill the legal name, registry,
+   tax number, representative, address, city and the bank details. Until then they print `[●]`.
+2. Open a contract → **Contract document**: the 19-article Arabic contract for its services, with
+   the annex price table and the payment plan. "Save as PDF" in the print dialog makes the file.
+3. The approval email now carries a link to the contract and its invoices (`/c/<id>?k=…`, read-only,
+   HMAC of the contract id with `NEXTAUTH_SECRET`). Each issued invoice has **Print invoice** and
+   **Email invoice**.
+
+```sh
+check https://it-portal.sankari-holding.com/api/health                 # 200
+check https://it-portal.sankari-holding.com/c/00000000-0000-0000-0000-000000000000?k=x   # 404
+```

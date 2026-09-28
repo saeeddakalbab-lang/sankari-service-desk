@@ -6,6 +6,9 @@ import { button, emailShell, para, rowsTable } from "./email-layout";
 import { usdToAedCents } from "./money";
 import { adjustContract, DEFAULT_PRICING, midpointMonths, percentToBps, quote, quoteInputSchema, withWorkPattern, workload, type PricingConfig } from "./pricing";
 import { getSetting, getUsdToAedRate } from "./settings";
+import { contractLink } from "./contract-link";
+import { usdInArabicWords } from "./arabic-words";
+import { EMPTY_PARTY, type ContractParty } from "./contract-template";
 import type { User } from "./types";
 
 // Client contracts: a public request with a computed price -> admin review -> approved and sent with the
@@ -39,7 +42,20 @@ export async function getPricing(): Promise<PricingConfig> {
   const cfg = { ...DEFAULT_PRICING, ...v, services: { ...(v.services && Object.keys(v.services).length ? v.services : DEFAULT_PRICING.services) } };
   return [cfg.hoursPerDay, cfg.daysPerWeek, cfg.weeksPerMonth, cfg.multiplier].every(n => Number.isInteger(n) && n > 0) ? withWorkPattern(cfg) : DEFAULT_PRICING;
 }
-async function getTerms() {
+// Sankari's own details as the first party of every contract and the issuer of every invoice.
+// Admin-edited in Settings; a blank field prints as [●] on the document.
+const partyField = (n: number) => z.string().trim().max(n).default("");
+export const partySchema = z.object({ legalName: z.string().trim().min(2).max(200), registry: partyField(200), taxNumber: partyField(60), representative: partyField(120), title: partyField(120), authority: partyField(200), address: partyField(300), phone: partyField(40), email: z.union([z.literal(""), z.string().trim().toLowerCase().email().max(254)]).default(""), city: partyField(80), arbitrationCity: partyField(80), bank: partyField(600) });
+export async function getContractParty(): Promise<ContractParty> { return { ...EMPTY_PARTY, ...(await getSetting<Partial<ContractParty>>("contract_party", {})) }; }
+export async function saveContractParty(input: z.infer<typeof partySchema>, userId: string, ipHash: string) {
+  await transaction(async c => {
+    const before = (await c.query(`SELECT value FROM settings WHERE key='contract_party' FOR UPDATE`)).rows[0]?.value ?? null;
+    await c.query(`INSERT INTO settings(key,value,updated_by) VALUES('contract_party',$1,$2) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by`, [JSON.stringify(input), userId]);
+    await c.query(`INSERT INTO audit_log(actor_id,action,before_data,after_data,ip_hash) VALUES($1,'settings.contract_party',$2,$3,$4)`, [userId, JSON.stringify(before), JSON.stringify(input), ipHash]);
+  });
+  return getContractParty();
+}
+export async function getTerms() {
   const v = await getSetting<{ signingBps?: number; midpointBps?: number; finalBps?: number; paymentTermsDays?: number }>("installments", {});
   const signingBps = v.signingBps ?? 5000, midpointBps = v.midpointBps ?? 2500;
   if (signingBps + midpointBps > 10000) throw new Error("Installment shares exceed 100%");
@@ -59,11 +75,20 @@ const admins = async () => (await query<{ email: string }>(`SELECT email FROM us
 const audit = (c: PoolClient | null, actor: string | null, action: string, data: unknown, ip = "") => (c ? c.query.bind(c) : query)(`INSERT INTO audit_log(actor_id,action,after_data,ip_hash) VALUES($1,$2,$3,$4)`, [actor, action, JSON.stringify(data), ip]);
 
 // ---------- Public request ----------
+// What the contract document needs about the client beyond the contact: the signatory's title, the
+// address and the city are required; registry, tax number, sites and hours can follow before signing.
+const opt = (n: number) => z.string().trim().max(n).optional().default("");
+const hhmm = z.string().trim().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/, "Time as HH:MM").optional().default("");
+export const clientDetailsSchema = z.object({
+  legalName: opt(200), registry: opt(120), taxNumber: opt(60), title: z.string().trim().min(2).max(120), address: z.string().trim().min(3).max(300), city: z.string().trim().min(2).max(80),
+  sites: opt(300), hoursFrom: hhmm, hoursTo: hhmm,
+});
 const today = () => new Date().toISOString().slice(0, 10);
 export const contractRequestSchema = z.object({
   companyName: z.string().trim().min(2).max(160), contactName: z.string().trim().min(2).max(120), contactEmail: z.string().trim().toLowerCase().email().max(254),
   contactPhone: z.string().trim().min(6).max(40).regex(/^[+\d\s()-]+$/, "Phone: digits, spaces, + ( ) - only"), requirements: z.string().trim().min(10).max(4000),
   requestedStartDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), website: z.string().max(0).optional().default(""),
+  details: clientDetailsSchema,
 }).and(quoteInputSchema);
 
 export async function submitContractRequest(raw: unknown, ipHash: string) {
@@ -75,9 +100,9 @@ export async function submitContractRequest(raw: unknown, ipHash: string) {
     const year = new Date().getUTCFullYear(), n = (await c.query<{ n: number }>(`SELECT coalesce(max(substring(reference from '\\d+$')::int),0)+1 n FROM contracts WHERE reference LIKE $1`, [`CT-${year}-%`])).rows[0].n;
     const reference = `CT-${year}-${String(n).padStart(4, "0")}`;
     const snapshot = { config: cfg, usdToAedRate: rate, installments: terms, quotedAt: new Date().toISOString() };
-    const ct = (await c.query<{ id: string }>(`INSERT INTO contracts(reference,company_name,contact_name,contact_email,contact_phone,requirements,support_type,requested_start_date,duration_months,currency,subtotal_cents,onsite_premium_cents,total_cents,pricing_snapshot,status)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'submitted') RETURNING id`,
-      [reference, input.companyName, input.contactName, input.contactEmail, input.contactPhone, input.requirements, input.supportType, input.requestedStartDate, input.durationMonths, q.currency, q.subtotalCents.toString(), q.onsitePremiumCents.toString(), q.totalCents.toString(), JSON.stringify(snapshot)])).rows[0];
+    const ct = (await c.query<{ id: string }>(`INSERT INTO contracts(reference,company_name,contact_name,contact_email,contact_phone,requirements,support_type,requested_start_date,duration_months,currency,subtotal_cents,onsite_premium_cents,total_cents,pricing_snapshot,client_details,status)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'submitted') RETURNING id`,
+      [reference, input.companyName, input.contactName, input.contactEmail, input.contactPhone, input.requirements, input.supportType, input.requestedStartDate, input.durationMonths, q.currency, q.subtotalCents.toString(), q.onsitePremiumCents.toString(), q.totalCents.toString(), JSON.stringify(snapshot), JSON.stringify(input.details)])).rows[0];
     for (const l of q.lines) await c.query(`INSERT INTO contract_line_items(contract_id,service_key,service_label,hours_per_month,base_salary_cents,flat_cost_cents,multiplier,standard_hours,monthly_full_time_cents,monthly_price_cents,line_total_cents,weeks_per_month,days_per_week) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
       [ct.id, l.serviceKey, l.label, l.hoursPerMonth, l.baseSalaryCents, l.flatCostCents, l.multiplier, l.standardHours, l.monthlyFullTimeCents.toString(), l.monthlyPriceCents.toString(), l.lineTotalCents.toString(), l.weeksPerMonth, l.daysPerWeek]);
     await audit(c, null, "contract.submitted", { contractId: ct.id, reference, company: input.companyName, totalCents: q.totalCents.toString() }, ipHash);
@@ -186,7 +211,8 @@ export async function contractAction(id: string, input: z.infer<typeof actionSch
          ["Support", ct.support_type === "onsite" ? "Onsite" : "Remote"], ["Duration", `${ct.duration_months} months from ${ct.rsd}`],
          ...(BigInt(ct.discount_cents ?? 0) > 0n ? [["Subtotal", usd(BigInt(ct.subtotal_cents) + BigInt(ct.onsite_premium_cents))], [`Discount ${Number(ct.adjustment_bps) / 100}%`, `− ${usd(ct.discount_cents)}`]] as [string, string][] : []),
          ["Contract total", usd(ct.total_cents)],
-         ["Invoice", inv.reference], ["Amount due now (50%)", usd(inv.amount_cents)], ["Payment terms", `${terms.paymentTermsDays} days`]]);
+         ["Invoice", inv.reference], [`Amount due now (${terms.signingBps / 100}%)`, usd(inv.amount_cents)], ["Payment terms", `${terms.paymentTermsDays} days`], ...bankRow(await getContractParty())],
+        { href: contractLink(id), label: "Read the contract and the invoice" });
     } else if (input.action === "reject") await mail(`contract-rejected:${id}`, ct.contact_email, `About your contract request ${ct.reference}`, [salutation, `We are unable to proceed with this request.`, `Reason: ${r.out.reason}`]);
     else if (input.action === "activate") await mail(`contract-active:${id}`, ct.contact_email, `Your contract ${ct.reference} starts on ${r.out.startDate}`, [salutation, `Thank you for your payment. Work starts on ${r.out.startDate}. The 25% midpoint invoice is issued after ${r.out.midpointMonth} month(s), and the final 25% at the end of the contract.`]);
     else if (input.action === "cancel") await mail(`contract-cancelled:${id}`, ct.contact_email, `Contract ${ct.reference} cancelled`, [salutation, `This contract has been cancelled. Any unpaid invoices are void.`, `Reason: ${r.out.reason}`]);
@@ -231,15 +257,40 @@ export async function addAssignment(contractId: string, input: z.infer<typeof as
   return r;
 }
 
+const bankRow = (p: ContractParty): [string, string][] => p.bank.trim() ? [["Pay to", p.bank.trim()]] : [];
+const INSTALLMENT: Record<string, string> = { signing: "On signing", midpoint: "At the contract midpoint", final: "At the end of the contract" };
+// The invoice as an email: the figures, the due date, where to pay, and the printable invoice behind a link.
+async function invoiceMail(invoiceId: string, eventKey: string) {
+  const terms = await getTerms(), party = await getContractParty();
+  const i = (await query<{ id: string; reference: string; amount_cents: string; share_bps: number; installment: string; issued: string; due: string; contact_email: string; contact_name: string; company_name: string; contract_ref: string; cid: string }>(
+    `SELECT i.id,i.reference,i.amount_cents::text,i.share_bps,i.installment::text,to_char(coalesce(i.sent_at,now()),'YYYY-MM-DD') issued,to_char(coalesce(i.sent_at,now())::date+$2::int,'YYYY-MM-DD') due,
+       c.contact_email,c.contact_name,c.company_name,c.reference contract_ref,c.id cid FROM invoices i JOIN contracts c ON c.id=i.contract_id WHERE i.id=$1`, [invoiceId, terms.paymentTermsDays])).rows[0];
+  if (!i) throw new AppError("Invoice not found", 404);
+  await mail(eventKey, i.contact_email, `Invoice ${i.reference} · ${i.company_name}`, [`Dear ${i.contact_name},`,
+    `Please find invoice ${i.reference} for contract ${i.contract_ref}. It is payable within ${terms.paymentTermsDays} days.`,
+    `مرفق لكم الفاتورة ${i.reference} عن العقد ${i.contract_ref}، وتستحق خلال ${terms.paymentTermsDays} يوماً. يمكنكم عرضها وطباعتها من الرابط أدناه.`],
+    [["Invoice", i.reference], ["Contract", i.contract_ref], ["Installment", `${INSTALLMENT[i.installment] ?? i.installment} · ${i.share_bps / 100}%`], ["Issued", i.issued], ["Due by", i.due], ["Amount", usd(i.amount_cents)], ["المبلغ كتابةً", usdInArabicWords(i.amount_cents)], ...bankRow(party)],
+    { href: contractLink(i.cid, i.id), label: "View and print the invoice" });
+}
+// An admin sends an issued invoice again (to the client's contract email). Each send is its own email.
+export async function sendInvoice(invoiceId: string, user: User, ipHash: string) {
+  if (!user.roles.includes("admin") && !user.roles.includes("accountant")) throw new AppError("Only admins and accountants send invoices", 403);
+  const inv = (await query<{ status: string; cid: string; reference: string }>(`SELECT i.status::text,i.contract_id cid,i.reference FROM invoices i WHERE i.id=$1`, [invoiceId])).rows[0];
+  if (!inv) throw new AppError("Invoice not found", 404);
+  if (!["sent", "overdue"].includes(inv.status)) throw new AppError(`This invoice is ${inv.status}; only an issued, unpaid invoice can be sent`, 409);
+  await invoiceMail(invoiceId, `invoice-resend:${invoiceId}:${Date.now()}`);
+  await audit(null, user.id, "contract.invoice_sent", { contractId: inv.cid, invoiceId, reference: inv.reference }, ipHash);
+  return { invoiceId, sent: true };
+}
+
 // Worker: issue midpoint/final invoices on their date, mark unpaid ones overdue after the payment terms.
 export async function runContracts() {
   const terms = await getTerms(), out = { issued: 0, overdue: 0 };
-  const due = await query<{ id: string; reference: string; amount_cents: string; installment: string; contact_email: string; contact_name: string; company_name: string; contract_ref: string }>(
-    `UPDATE invoices i SET status='sent',sent_at=now() FROM contracts c WHERE c.id=i.contract_id AND c.status='active' AND i.status='pending' AND i.due_date<=current_date
-      RETURNING i.id,i.reference,i.amount_cents::text,i.installment::text,c.contact_email,c.contact_name,c.company_name,c.reference contract_ref`);
+  const due = await query<{ id: string }>(
+    `UPDATE invoices i SET status='sent',sent_at=now() FROM contracts c WHERE c.id=i.contract_id AND c.status='active' AND i.status='pending' AND i.due_date<=current_date RETURNING i.id,i.reference`);
   for (const i of due.rows) {
-    await mail(`invoice-issued:${i.id}`, i.contact_email, `Invoice ${i.reference} · ${i.installment === "midpoint" ? "25% at midpoint" : "final 25%"}`, [`Dear ${i.contact_name},`, `Please find the ${i.installment === "midpoint" ? "midpoint" : "final"} invoice for contract ${i.contract_ref}.`], [["Invoice", i.reference], ["Amount", usd(i.amount_cents)], ["Payment terms", `${terms.paymentTermsDays} days`]]);
-    await audit(null, null, "contract.invoice_issued", { invoiceId: i.id, reference: i.reference });
+    await invoiceMail(i.id, `invoice-issued:${i.id}`);
+    await audit(null, null, "contract.invoice_issued", { invoiceId: i.id });
     out.issued++;
   }
   const late = await query<{ id: string; reference: string; company_name: string }>(`UPDATE invoices i SET status='overdue' FROM contracts c WHERE c.id=i.contract_id AND i.status='sent' AND i.sent_at < now()-($1||' days')::interval RETURNING i.id,i.reference,c.company_name`, [String(terms.paymentTermsDays)]);

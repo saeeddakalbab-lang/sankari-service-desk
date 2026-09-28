@@ -37,7 +37,7 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
         <h1>{c.company_name}</h1>
         <p><span className="pill info">{t(`ct.st.${s}` as I18nKey)}</span></p>
       </div>
-      <a className="btn" href={`/admin/contracts/${c.id}/print`} target="_blank" rel="noreferrer">{t("ct.print")}</a>
+      <a className="btn" href={`/admin/contracts/${c.id}/print`} target="_blank" rel="noreferrer">{t("doc.contract")}</a>
     </div>
 
     <div className="grid-2" style={{ alignItems: "start" }}>
@@ -70,6 +70,8 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
         <p><strong>{c.contact_name}</strong> · <bdi className="mono" dir="ltr">{c.contact_email}</bdi> · <bdi className="mono" dir="ltr">{c.contact_phone}</bdi></p>
         <p className="soft">{t(c.support_type === "onsite" ? "cr.onsite" : "cr.remote")} · {c.duration_months} × {t("cycle.monthly")} · {t("ct.requestedStart")} <bdi className="mono" dir="ltr">{c.requested_start_date}</bdi></p>
         {c.start_date && <p>{t("ct.startEnd", { start: c.start_date, end: c.end_date })}</p>}
+        {(() => { const x = (c.client_details ?? {}) as Record<string, string>, rows = ([["cr.legalName", x.legalName], ["cr.signTitle", x.title], ["cr.registry", x.registry], ["cr.taxNumber", x.taxNumber], ["cr.address", [x.address, x.city].filter(Boolean).join(" – ")], ["cr.sites", x.sites], ["cr.coverHours", x.hoursFrom && x.hoursTo ? `${x.hoursFrom} – ${x.hoursTo}` : ""]] as [I18nKey, string | undefined][]).filter(([, v]) => v);
+          return rows.length ? <dl className="facts" style={{ gridTemplateColumns: "repeat(2,minmax(0,1fr))" }}>{rows.map(([k, v]) => <div key={k}><dt>{t(k)}</dt><dd style={{ fontFamily: "inherit", fontWeight: 500 }}>{v}</dd></div>)}</dl> : <p className="notice">{t("doc.noDetails")}</p>; })()}
         <h3 style={{ fontSize: 15, marginTop: 8 }}>{t("ct.requirements")}</h3>
         <p style={{ whiteSpace: "pre-wrap" }}>{c.requirements}</p>
         {c.rejection_reason && <div className="notice">{c.rejection_reason}</div>}
@@ -90,8 +92,11 @@ export function ContractAdmin({ d, admin, today }: { d: Detail; admin: boolean; 
             <label className="sr-only" htmlFor={`on-${i.id}`}>{t("ct.paidOn")}</label><input className="input mono" style={{ width: 150 }} id={`on-${i.id}`} type="date" max={today} value={p.on} onChange={e => setPaid({ ...paid, [i.id]: { ...p, on: e.target.value } })} />
             <label className="sr-only" htmlFor={`am-${i.id}`}>{t("ct.amount")}</label><input className="input mono" style={{ width: 120 }} id={`am-${i.id}`} dir="ltr" value={p.amount} onChange={e => setPaid({ ...paid, [i.id]: { ...p, amount: e.target.value } })} />
             <button type="submit" className="btn btn-good btn-small" disabled={busy}>{t("ct.markPaid")}</button>
+          </form>}
+          {i.status !== "pending" && <div className="row" style={{ marginTop: 6 }}>
             <a className="btn btn-small" href={`/admin/contracts/${c.id}/print?invoice=${i.id}`} target="_blank" rel="noreferrer">{t("ct.printInvoice")}</a>
-          </form>}<Msg area={`inv-${i.id}`} /></td>
+            {["sent", "overdue"].includes(i.status) && <button type="button" className="btn btn-outline btn-small" disabled={busy} onClick={() => post(`inv-${i.id}`, `/api/admin/invoices/${i.id}/send`, {})}>{t("doc.emailInvoice")}</button>}
+          </div>}<Msg area={`inv-${i.id}`} /></td>
         </tr>; })}</tbody>
       </table></div>
     </section>}

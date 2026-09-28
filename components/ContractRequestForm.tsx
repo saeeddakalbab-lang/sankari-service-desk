@@ -17,6 +17,9 @@ export function ContractRequestForm({ pricing, minDate }: { pricing: PricingConf
   const [lines, setLines] = useState([{ service: keys[0], weeks: String(full.weeksPerMonth), days: String(full.daysPerWeek) }]);
   const wire = () => lines.map(l => ({ service: l.service, weeksPerMonth: Number(l.weeks), daysPerWeek: Number(l.days) }));
   const [f, setF] = useState({ companyName: "", contactName: "", contactEmail: "", contactPhone: "", requirements: "", supportType: "remote" as "remote" | "onsite", requestedStartDate: minDate, durationMonths: "6", website: "" });
+  // What the contract document needs about the client (lib/contracts.ts clientDetailsSchema).
+  const [det, setDet] = useState({ legalName: "", registry: "", taxNumber: "", title: "", address: "", city: "", sites: "", hoursFrom: "", hoursTo: "" });
+  const dset = (k: keyof typeof det) => (e: React.ChangeEvent<HTMLInputElement>) => setDet({ ...det, [k]: e.target.value });
   const [busy, setBusy] = useState(false), [error, setError] = useState(""), [done, setDone] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const q = useMemo(() => { try { return quote(pricing, { lines: wire(), durationMonths: Number(f.durationMonths), supportType: f.supportType }); } catch { return null; } }, [pricing, lines, f.durationMonths, f.supportType]);
@@ -24,7 +27,7 @@ export function ContractRequestForm({ pricing, minDate }: { pricing: PricingConf
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(""); setBusy(true);
     try {
-      const r = await fetch("/api/contracts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, durationMonths: Number(f.durationMonths), lines: wire() }) });
+      const r = await fetch("/api/contracts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...f, durationMonths: Number(f.durationMonths), lines: wire(), details: det }) });
       const d = await r.json(); if (!r.ok) throw new Error(d.error || "Request failed"); setDone(d.reference);
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); } finally { setBusy(false); }
   };
@@ -46,6 +49,19 @@ export function ContractRequestForm({ pricing, minDate }: { pricing: PricingConf
               <div className="field"><label className="label" htmlFor="cr-name">{t("cr.contact")}</label><input className="input" id="cr-name" required minLength={2} maxLength={120} autoComplete="name" value={f.contactName} onChange={set("contactName")} /></div>
               <div className="field"><label className="label" htmlFor="cr-mail">{t("cr.email")}</label><input className="input mono" id="cr-mail" type="email" dir="ltr" required autoComplete="email" value={f.contactEmail} onChange={set("contactEmail")} /></div>
               <div className="field"><label className="label" htmlFor="cr-tel">{t("cr.phone")}</label><input className="input mono" id="cr-tel" type="tel" dir="ltr" required minLength={6} maxLength={40} autoComplete="tel" value={f.contactPhone} onChange={set("contactPhone")} /></div>
+            </div>
+            <h3 style={{ fontSize: 15, marginTop: 4 }}>{t("cr.forContract")}</h3>
+            <p className="hint" style={{ marginTop: -6 }}>{t("cr.forContractHint")}</p>
+            <div className="grid-2">
+              <div className="field"><label className="label" htmlFor="cr-legal">{t("cr.legalName")} <span className="soft">{t("cr.optional")}</span></label><input className="input" id="cr-legal" maxLength={200} value={det.legalName} onChange={dset("legalName")} /></div>
+              <div className="field"><label className="label" htmlFor="cr-title">{t("cr.signTitle")}</label><input className="input" id="cr-title" required minLength={2} maxLength={120} autoComplete="organization-title" value={det.title} onChange={dset("title")} /></div>
+              <div className="field"><label className="label" htmlFor="cr-reg">{t("cr.registry")} <span className="soft">{t("cr.optional")}</span></label><input className="input mono" id="cr-reg" dir="ltr" maxLength={120} value={det.registry} onChange={dset("registry")} /></div>
+              <div className="field"><label className="label" htmlFor="cr-tax">{t("cr.taxNumber")} <span className="soft">{t("cr.optional")}</span></label><input className="input mono" id="cr-tax" dir="ltr" maxLength={60} value={det.taxNumber} onChange={dset("taxNumber")} /></div>
+              <div className="field"><label className="label" htmlFor="cr-addr">{t("cr.address")}</label><input className="input" id="cr-addr" required minLength={3} maxLength={300} autoComplete="street-address" value={det.address} onChange={dset("address")} /></div>
+              <div className="field"><label className="label" htmlFor="cr-city">{t("cr.city")}</label><input className="input" id="cr-city" required minLength={2} maxLength={80} autoComplete="address-level2" value={det.city} onChange={dset("city")} /></div>
+              <div className="field"><label className="label" htmlFor="cr-sites">{t("cr.sites")} <span className="soft">{t("cr.optional")}</span></label><input className="input" id="cr-sites" maxLength={300} value={det.sites} onChange={dset("sites")} aria-describedby="cr-sites-h" /><span id="cr-sites-h" className="hint">{t("cr.sitesHint")}</span></div>
+              <fieldset className="field" style={{ border: 0, padding: 0, margin: 0 }}><legend className="label">{t("cr.coverHours")} <span className="soft">{t("cr.optional")}</span></legend>
+                <div className="row"><label className="sr-only" htmlFor="cr-hf">{t("cr.hoursFrom")}</label><input className="input mono" id="cr-hf" type="time" style={{ maxWidth: 140 }} value={det.hoursFrom} onChange={dset("hoursFrom")} /><span aria-hidden="true">–</span><label className="sr-only" htmlFor="cr-ht">{t("cr.hoursTo")}</label><input className="input mono" id="cr-ht" type="time" style={{ maxWidth: 140 }} value={det.hoursTo} onChange={dset("hoursTo")} /></div></fieldset>
             </div>
             {/* Bots fill every field; people never see this one. */}
             <div aria-hidden="true" style={{ position: "absolute", left: "-10000px", width: 1, height: 1, overflow: "hidden" }}><label htmlFor="cr-web">Website</label><input id="cr-web" tabIndex={-1} autoComplete="off" value={f.website} onChange={set("website")} /></div>

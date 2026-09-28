@@ -1,6 +1,7 @@
 import { getKpis } from "../lib/kpi";
 import { getJiraIssues,getJiraOverview } from "../lib/jira";
 import { pool,query } from "../lib/db";
+import { contractDocument } from "../lib/contract-docs";
 
 const requiredTables=["users","requests","comments","audit_log","email_outbox","jira_issues","migration_staging","settings","companies","services","subscriptions","purchase_requests","contracts","contract_line_items","invoices","payables","ledger_entries","contract_assignments"];
 const tables=await query<{table_name:string}>(`SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name = ANY($1::text[])`,[requiredTables]);
@@ -42,6 +43,28 @@ try{
   await invoiceClient.query("ROLLBACK");
   if(e instanceof Error && e.message==="Mismatched installment total was accepted")throw e;
 }finally{invoiceClient.release();}
+// The contract document and invoice are built from a saved contract: one submitted sample with client
+// details and two services, then removed. The details freeze with the price once approved (019),
+// checked inside a transaction that is rolled back.
+const docId = (await query<{ id: string }>(`INSERT INTO contracts(reference,company_name,contact_name,contact_email,contact_phone,support_type,requested_start_date,duration_months,subtotal_cents,total_cents,pricing_snapshot,client_details)
+  VALUES('SMOKE-CT-DOC','Smoke Co','Smoke Contact','smoke@example.com','+963 11 000','onsite',current_date,6,1950000,1950000,'{}'::jsonb,$1) RETURNING id`, [JSON.stringify({ title: "المدير العام", address: "دمشق – الشعلان", city: "دمشق" })])).rows[0].id;
+try {
+  for (const [k, h, m, t] of [["consultant", 96, 175000, 1050000], ["it_support", 192, 150000, 900000]] as const)
+    await query(`INSERT INTO contract_line_items(contract_id,service_key,service_label,hours_per_month,base_salary_cents,flat_cost_cents,multiplier,standard_hours,monthly_full_time_cents,monthly_price_cents,line_total_cents,weeks_per_month,days_per_week) VALUES($1,$2,$2,$3,0,0,3,192,0,$4,$5,$6,6)`, [docId, k, h, m, t, h / 48]);
+  const x = await contractDocument(docId);
+  if (!x || x.doc.sections.length !== 19 || x.doc.controlNo !== "SH-IT-MS" || !JSON.stringify(x.doc).includes("دمشق – الشعلان")) throw new Error("Contract document was not built from the saved contract");
+  const plan = x.doc.sections[6].blocks.find(b => b.kind === "table");
+  if (!plan || plan.kind !== "table" || plan.total?.[2] !== "19,500.00") throw new Error(`Contract payment plan is wrong: ${JSON.stringify(plan)}`);
+} finally { await query(`DELETE FROM contracts WHERE id=$1`, [docId]); }
+const freeze = await pool.connect();
+try {
+  await freeze.query("BEGIN");
+  const id = (await freeze.query<{ id: string }>(`INSERT INTO contracts(reference,company_name,contact_name,contact_email,support_type,requested_start_date,duration_months,subtotal_cents,total_cents,pricing_snapshot,status) VALUES('SMOKE-CT-FRZ','Smoke Co','Smoke','smoke@example.com','remote',current_date,6,100,100,'{}'::jsonb,'submitted') RETURNING id`)).rows[0].id;
+  await freeze.query(`UPDATE contracts SET status='approved' WHERE id=$1`, [id]);
+  await freeze.query("SAVEPOINT s");
+  try { await freeze.query(`UPDATE contracts SET client_details='{"title":"changed"}'::jsonb WHERE id=$1`, [id]); throw new Error("Client details changed after approval"); }
+  catch (e) { if (e instanceof Error && e.message === "Client details changed after approval") throw e; await freeze.query("ROLLBACK TO SAVEPOINT s"); }
+} finally { await freeze.query("ROLLBACK"); freeze.release(); }
 // The Jira overview is all aggregate SQL: run it empty, then with sample rows (a done issue with a
 // resolution date, an overdue one, an unassigned one with an empty date), then remove the samples.
 for(const d of [30,90,0])await getJiraOverview(d);

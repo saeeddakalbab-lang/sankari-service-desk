@@ -81,7 +81,7 @@ try {
 // Manager matching (022): one side alone changes nothing; both sides, in either order, link them.
 {
   const mk = async (e: string, n: string) => (await query<{ id: string }>(`INSERT INTO users(email,name,roles) VALUES($1,$2,'{employee}') RETURNING id`, [e, n])).rows[0].id;
-  const who = (id: string, email: string, name: string) => ({ id, email, name, image: null, roles: ["employee" as const] });
+  const who = (id: string, email: string, name: string, roles: ("employee" | "manager")[] = ["employee"]) => ({ id, email, name, image: null, roles });
   const [m, e1, e2] = [await mk("smoke.mgr@sankari-holding.com", "Smoke Manager"), await mk("smoke.e1@sankari-holding.com", "Smoke One"), await mk("smoke.e2@sankari-holding.com", "Smoke Two")];
   const mgrOf = async (id: string) => (await query<{ manager_user_id: string | null }>(`SELECT manager_user_id FROM users WHERE id=$1`, [id])).rows[0].manager_user_id;
   try {
@@ -89,10 +89,13 @@ try {
     await teamAction(who(e1, "smoke.e1@sankari-holding.com", "Smoke One"), { action: "set_manager", email: "smoke.mgr@sankari-holding.com", name: "Smoke Manager" }, "");
     if (await mgrOf(e1)) throw new Error("Naming a manager alone set the manager");
     if (!(await teamState(m)).pending.length && !(await teamState(e1)).claim) throw new Error("The claim was not kept");
-    const r1 = await teamAction(who(m, "smoke.mgr@sankari-holding.com", "Smoke Manager"), { action: "add", email: "smoke.e1@sankari-holding.com" }, "");
+    let refused = false; try { await teamAction(who(m, "smoke.mgr@sankari-holding.com", "Smoke Manager"), { action: "add", email: "smoke.e1@sankari-holding.com" }, ""); } catch { refused = true; }
+    if (!refused) throw new Error("Someone without the Manager role kept a team");
+    await query(`UPDATE users SET roles=array_append(roles,'manager') WHERE id=$1`, [m]);
+    const r1 = await teamAction(who(m, "smoke.mgr@sankari-holding.com", "Smoke Manager", ["employee", "manager"]), { action: "add", email: "smoke.e1@sankari-holding.com" }, "");
     if (!r1.matched || (await mgrOf(e1)) !== m) throw new Error("Employee-first match did not link them");
     // Manager first, then the employee confirms the offer.
-    await teamAction(who(m, "smoke.mgr@sankari-holding.com", "Smoke Manager"), { action: "add", email: "smoke.e2@sankari-holding.com" }, "");
+    await teamAction(who(m, "smoke.mgr@sankari-holding.com", "Smoke Manager", ["employee", "manager"]), { action: "add", email: "smoke.e2@sankari-holding.com" }, "");
     if (await mgrOf(e2)) throw new Error("Adding a team member alone set their manager");
     const offer = (await teamState(e2)).offers[0];
     if (!offer) throw new Error("The employee does not see the manager's offer");

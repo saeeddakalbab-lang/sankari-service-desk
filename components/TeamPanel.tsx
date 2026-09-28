@@ -62,5 +62,7 @@ export function TeamPanel({ initial, mode }: { initial: TeamState; mode: "prompt
     </form>
     <Msg area="team" />
   </section>;
+  // My team appears once an admin has made this person a Manager (or they are the CEO).
+  if (!st.canHaveTeam && !st.team.length) return myManager;
   return <div className="grid-2" style={{ alignItems: "start", gap: 24 }}>{myManager}{myTeam}</div>;
 }

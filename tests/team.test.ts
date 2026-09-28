@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { needsManager, teamActionSchema } from "../lib/team";
+import { canHaveTeam, needsManager, teamActionSchema } from "../lib/team";
 
 describe("who is asked for a manager", () => {
   it("asks everyone without a manager except the CEO, the Owner and the Board", () => {
@@ -13,5 +13,14 @@ describe("who is asked for a manager", () => {
     expect(teamActionSchema.safeParse({ action: "set_manager", email: "omar", name: "Omar" }).success).toBe(false);
     expect(teamActionSchema.safeParse({ action: "set_manager", email: "omar@sankari-holding.com", name: "" }).success).toBe(false);
     expect(teamActionSchema.parse({ action: "add", email: " Rama@Sankari-Holding.com " })).toEqual({ action: "add", email: "rama@sankari-holding.com" });
+  });
+});
+
+describe("who keeps a team list", () => {
+  it("only a Manager or the CEO", () => {
+    expect(canHaveTeam(["employee"])).toBe(false);
+    expect(canHaveTeam(["employee", "admin"])).toBe(false);
+    expect(canHaveTeam(["employee", "manager"])).toBe(true);
+    expect(canHaveTeam(["employee", "ceo"])).toBe(true);
   });
 });

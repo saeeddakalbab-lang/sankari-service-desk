@@ -15,6 +15,8 @@ import type { User } from "./types";
 const base = () => process.env.NEXTAUTH_URL || "http://localhost:3000";
 const email = z.string().trim().toLowerCase().email().max(254);
 // The CEO, the Owner and the Board have no manager to ask for.
+// Only people an admin has made a Manager (and the CEO, who has direct reports) keep a team list.
+export const canHaveTeam = (roles: readonly string[]) => roles.includes("manager") || roles.includes("ceo");
 export const needsManager = (u: { roles: readonly string[]; manager_user_id?: string | null }) => !u.manager_user_id && !u.roles.some(r => ["ceo", "owner", "board"].includes(r));
 
 async function checkDomain(e: string) {
@@ -28,6 +30,7 @@ async function mail(key: string, to: string, title: string, lines: string[], lin
 
 export type TeamState = {
   needsManager: boolean;
+  canHaveTeam: boolean;
   manager: { name: string; email: string } | null;
   claim: { email: string; name: string | null; at: string; knownName: string | null } | null;
   offers: { managerUserId: string; name: string; email: string }[];
@@ -44,7 +47,7 @@ export async function teamState(userId: string): Promise<TeamState> {
   const pending = (await query<{ email: string; name: string | null; namedYou: boolean; joined: boolean; placed: boolean }>(`
     SELECT t.employee_email email,u.name,coalesce(u.manager_claim_email=lower($2),false) "namedYou",u.id IS NOT NULL joined,coalesce(u.manager_user_id IS NOT NULL AND u.manager_user_id<>$1,false) placed
       FROM team_claims t LEFT JOIN users u ON lower(u.email)=t.employee_email WHERE t.manager_user_id=$1 AND t.matched_at IS NULL ORDER BY t.created_at`, [userId, me.email])).rows;
-  return { needsManager: needsManager(me), manager: me.memail ? { name: me.mname!, email: me.memail } : null,
+  return { needsManager: needsManager(me), canHaveTeam: canHaveTeam(me.roles), manager: me.memail ? { name: me.mname!, email: me.memail } : null,
     claim: me.manager_claim_email && !me.manager_user_id ? { email: me.manager_claim_email, name: me.manager_claim_name, at: me.manager_claim_at!, knownName: me.claimed_name } : null, offers, team, pending };
 }
 
@@ -94,12 +97,17 @@ export async function teamAction(user: User, input: z.infer<typeof teamActionSch
     });
     if (r) await announce(r);
     else {
-      // Not matched yet: tell the named manager, if they are already in the portal, how to confirm.
-      const m = (await query<{ email: string; name: string }>(`SELECT email,name FROM users WHERE lower(email)=$1 AND disabled_at IS NULL`, [target!.email])).rows[0];
-      if (m) await mail(`team-asked:${user.id}:${target!.email}`, m.email, `${user.name} says you are their manager`, [`${user.name} (${me.email}) named you as their manager in the IT portal. If that is right, add them in Settings → My team: they join your team and you approve their subscription requests first.`, `ذكرك ${user.name} كمدير له في بوابة تقنية المعلومات. إن كان ذلك صحيحًا فأضفه من الإعدادات ← فريقي.`], { href: new URL("/settings#team", base()).href, label: "Open My team" });
+      // Not matched yet: tell the named manager how to confirm. If they are not a Manager in the portal
+      // yet, they have no My team to confirm from, so the admins are told instead.
+      const m = (await query<{ email: string; name: string; roles: string[] }>(`SELECT email,name,roles FROM users WHERE lower(email)=$1 AND disabled_at IS NULL`, [target!.email])).rows[0];
+      if (m && !canHaveTeam(m.roles)) for (const a of (await query<{ email: string }>(`SELECT email FROM users WHERE 'admin'=ANY(roles) AND disabled_at IS NULL`)).rows)
+        await mail(`team-needs-manager:${user.id}:${target!.email}:${a.email}`, a.email, `${user.name} named ${m.name} as their manager`, [`${user.name} (${me.email}) named ${m.name} (${m.email}) as their manager, but ${m.name} is not a Manager in the portal yet. If that is right, give them the Manager role in Admin settings → People; they can then confirm ${user.name} in Settings → My team.`], { href: new URL("/admin/settings", base()).href, label: "Open People" });
+      else if (m) await mail(`team-asked:${user.id}:${target!.email}`, m.email, `${user.name} says you are their manager`, [`${user.name} (${me.email}) named you as their manager in the IT portal. If that is right, add them in Settings → My team: they join your team and you approve their subscription requests first.`, `ذكرك ${user.name} كمدير له في بوابة تقنية المعلومات. إن كان ذلك صحيحًا فأضفه من الإعدادات ← فريقي.`], { href: new URL("/settings#team", base()).href, label: "Open My team" });
     }
     return { matched: !!r };
   }
+  // The team list is for managers only (an admin gives the role in People).
+  if (!canHaveTeam(user.roles)) throw new AppError("Only managers keep a team. An administrator can give you the Manager role.", 403);
   if (input.action === "add") {
     if (input.email === me.email.toLowerCase()) throw new AppError("You cannot add yourself to your team");
     await checkDomain(input.email);

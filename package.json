@@ -13,6 +13,8 @@
     "db:migrate": "tsx scripts/migrate-db.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:smoke": "tsx scripts/smoke-db.ts",
+    "db:report": "tsx scripts/cutover-report.ts",
+    "db:guards": "tsx scripts/verify-guards.ts",
     "worker": "tsx scripts/worker.ts",
     "migration:dry-run": "tsx scripts/migrate-artifacts.ts dry-run",
     "migration:commit": "tsx scripts/migrate-artifacts.ts commit",

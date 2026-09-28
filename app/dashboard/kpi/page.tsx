@@ -1,3 +1,13 @@
-import {ProtectedPage} from "@/components/ProtectedPage";import {KpiDashboard} from "@/components/KpiDashboard";
+import { KpiDashboard } from "@/components/KpiDashboard";
+import { ProtectedPage } from "@/components/ProtectedPage";
+import { getKpis } from "@/lib/kpi";
+import { OVERSIGHT_ROLES } from "@/lib/types";
+import { getViewer } from "@/lib/view";
+
 export const dynamic="force-dynamic";
-export default function KPI(){return <ProtectedPage roles={["board","admin"]}><div className="heading"><div><div className="eyebrow">Board intelligence</div><h1>Live operating picture.</h1><p>Request volume, service levels and workload across the holding.</p></div></div><KpiDashboard/></ProtectedPage>}
+export default async function KPI(){
+  const {user}=await getViewer();
+  const allowed=!!user&&OVERSIGHT_ROLES.some(r=>user.roles.includes(r));
+  const initial=allowed?JSON.parse(JSON.stringify(await getKpis(30))):null;
+  return <ProtectedPage roles={OVERSIGHT_ROLES}>{initial&&<KpiDashboard initial={initial}/>}</ProtectedPage>;
+}

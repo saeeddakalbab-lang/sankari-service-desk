@@ -1,4 +1,13 @@
-"use client";
-import {signIn} from "next-auth/react";import {useSearchParams} from "next/navigation";import {Suspense} from "react";
-function Login(){const q=useSearchParams(),error=q.get("error");return <main className="login"><section className="login-story"><img className="logo" src="/logo-white.png" alt="Sankari Holding"/><div><div className="eyebrow">SANKARI HOLDING / INTERNAL</div><h1>One place.<br/>Every request.</h1><p>Submit, track and understand work across the holding through one secure Workspace identity.</p></div><div className="eyebrow">Unified systems platform</div></section><section className="login-panel"><div className="login-box"><div className="eyebrow">Workspace access</div><h2>Welcome back.</h2><p>Sign in with your <strong>@sankari-holding.com</strong> Google Workspace account.</p>{error&&<p className="error">Access was denied. Use an active Sankari Holding Workspace account.</p>}<button className="btn primary" onClick={()=>signIn("google",{callbackUrl:"/portal"})}>Continue with Google</button><p style={{color:"var(--muted)",fontSize:12,marginTop:20}}>Access is restricted to the company Workspace. Personal Google accounts cannot sign in.</p></div></section></main>}
-export default function LoginPage(){return <Suspense><Login/></Suspense>}
+import { redirect } from "next/navigation";
+import { LoginScreen } from "@/components/LoginScreen";
+import { homeFor } from "@/lib/lines";
+import { getViewer } from "@/lib/view";
+
+export const dynamic="force-dynamic";
+export default async function Login({searchParams}:{searchParams:Promise<{error?:string;next?:string}>}){
+  const [{user,theme},q]=await Promise.all([getViewer(),searchParams]);
+  // Only an email-action path may be a return target, so the login page cannot be used as an open redirect.
+  const next=typeof q.next==="string"&&/^\/actions\/[A-Za-z0-9_-]{43}$/.test(q.next)?q.next:null;
+  if(user)redirect(next||homeFor(user.roles));
+  return <LoginScreen domain={process.env.GOOGLE_WORKSPACE_DOMAIN||"sankari-holding.com"} denied={!!q.error} theme={theme} next={next}/>;
+}

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>IT KPI dashboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=IBM+Plex+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#151A21;background:#F4F6F8}
+a{color:#1D5F70}a:hover{color:#134753}
+a:focus-visible,button:focus-visible{outline:3px solid #1D5F70;outline-offset:2px}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1120px; display: flex; background: #F4F6F8;">
+
+<nav aria-label="Main" style="width: 248px; flex-shrink: 0; box-sizing: border-box; padding: 28px 16px; background: #FFFFFF; border-right: 1px solid #DCE2E8; display: flex; flex-direction: column; gap: 28px;">
+<div style="padding: 0 12px; display: flex; flex-direction: column; gap: 2px;">
+<div style="font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 28px; color: #134753; letter-spacing: -0.01em;">Sankari</div>
+<div style="font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #69747F;">Unified platform</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px;">
+<a href="Main.dc.html" style="min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; color: #414B57; font-weight: 500; font-size: 15px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>Dashboard</a>
+<a href="HelpdeskForm.dc.html" style="min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; color: #414B57; font-weight: 500; font-size: 15px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>New request</a>
+<a href="RequestDetail.dc.html" style="min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; color: #414B57; font-weight: 500; font-size: 15px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"></path></svg>My requests</a>
+<a href="Approvals.dc.html" style="min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; color: #414B57; font-weight: 500; font-size: 15px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3 8-8"></path><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"></path></svg><span style="flex-grow: 1;">Approvals</span><span aria-label="2 waiting" style="min-width: 24px; height: 24px; padding: 0 7px; box-sizing: border-box; border-radius: 12px; background: #AE352A; color: #FFFFFF; font-family: 'IBM Plex Mono', monospace; font-size: 13px; display: flex; align-items: center; justify-content: center;">2</span></a>
+<a href="Stuck.dc.html" style="min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; color: #414B57; font-weight: 500; font-size: 15px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path></svg>Where it’s stuck</a>
+<a href="KPI.dc.html" aria-current="page" style="min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; background: #E1EEF0; color: #134753; font-weight: 600; font-size: 15px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"></path><path d="M7 15l4-4 3 3 5-6"></path></svg>IT KPIs</a>
+<a href="EmployeeSettings.dc.html" style="min-height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; color: #414B57; font-weight: 500; font-size: 15px; text-decoration: none;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 1v3M12 20v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1 12h3M20 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"></path></svg>Settings</a>
+</div>
+<div style="margin-top: auto; display: flex; align-items: center; gap: 12px; padding: 12px; border-top: 1px solid #DCE2E8;">
+<div aria-hidden="true" style="width: 40px; height: 40px; border-radius: 50%; background: #F6ECDA; color: #7A5418; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px;">NF</div>
+<div style="display: flex; flex-direction: column; gap: 2px;">
+<div style="font-size: 14px; font-weight: 600;">Nadia Farouk</div>
+<div style="font-size: 13px; color: #69747F;">CEO</div>
+</div>
+</div>
+</nav>
+
+<main style="flex-grow: 1; box-sizing: border-box; padding: 40px 48px; display: flex; flex-direction: column; gap: 24px;">
+<header style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;">
+<div style="display: flex; flex-direction: column; gap: 6px;">
+<h1 style="margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 40px; line-height: 1.1;">IT department KPIs</h1>
+<p style="margin: 0; font-size: 15px; color: #414B57;">Helpdesk, email account and subscription requests. Refreshes every 15 seconds.</p>
+</div>
+<div style="display: flex; align-items: center; gap: 16px;">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #414B57;"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background: #20744F;"></span>Live · updated <span style="font-family: 'IBM Plex Mono', monospace;">4s</span> ago</div>
+<div role="group" aria-label="Time range" style="display: flex; border: 1px solid #DCE2E8; border-radius: 8px; overflow: hidden; background: #FFFFFF;">
+<button type="button" aria-pressed="true" style="min-width: 64px; min-height: 44px; border: 0; background: #1D5F70; color: #FFFFFF; font: 600 14px 'IBM Plex Mono', monospace; cursor: pointer;">30d</button>
+<button type="button" aria-pressed="false" style="min-width: 64px; min-height: 44px; border: 0; background: #FFFFFF; color: #414B57; font: 500 14px 'IBM Plex Mono', monospace; cursor: pointer;">90d</button>
+</div>
+</div>
+</header>
+
+<section aria-label="Headline numbers" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px;">
+<div style="background: #FFFFFF; border: 1px solid #DCE2E8; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;"><div style="font-size: 14px; font-weight: 600; color: #414B57;">Open now</div><div style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 36px; line-height: 1;">23</div><div style="font-size: 13px; color: #69747F;">5 in approval · 18 with IT</div></div>
+<div style="background: #FFFFFF; border: 1px solid #DCE2E8; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;"><div style="font-size: 14px; font-weight: 600; color: #414B57;">Closed · 30 days</div><div style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 36px; line-height: 1;">118</div><div style="font-size: 13px; color: #69747F;">Resolved or completed</div></div>
+<div style="background: #FFFFFF; border: 1px solid #DCE2E8; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;"><div style="font-size: 14px; font-weight: 600; color: #414B57;">SLA compliance</div><div style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 36px; line-height: 1;">91.5%</div><div style="font-size: 13px; color: #69747F;">Closed within target</div></div>
+<div style="background: #FBE6E3; border: 1px solid #F1C4BE; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;"><div style="display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: #AE352A;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>Overdue</div><div style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 36px; line-height: 1; color: #AE352A;">4</div><div style="font-size: 13px; color: #8A2A21;">Past their SLA, still open</div></div>
+<div style="background: #FFFFFF; border: 1px solid #DCE2E8; border-radius: 12px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px;"><div style="font-size: 14px; font-weight: 600; color: #414B57;">Resolution time</div><div style="display: flex; align-items: baseline; gap: 10px;"><div style="font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: 36px; line-height: 1;">9.2h</div><div style="font-size: 13px; color: #414B57;">median</div></div><div style="font-size: 13px; color: #69747F;">Average <span style="font-family: 'IBM Plex Mono', monospace;">18.6h</span></div></div>
+</section>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 24px;">
+<section aria-labelledby="vol-h" style="background: #FFFFFF; border: 1px solid #DCE2E8; border-radius: 12px; padding: 22px 24px; display: flex; flex-direction: column; gap: 16px;">
+<div style="display: flex; justify-content: space-between; align-items: baseline;"><h2 id="vol-h" style="margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 20px;">Requests submitted per week</h2><div style="font-size: 13px; color: #414B57;">All three types</div></div>
+<figure role="img" aria-label="Requests per week: 24, 31, 27, 35, 29, 38, 33, and 9 so far this week" style="margin: 0; display: flex; flex-direction: column; gap: 8px;">
+<div style="position: relative; height: 200px; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 14px; align-items: end; padding: 0 4px; border-bottom: 1px solid #DCE2E8; background: linear-gradient(#EEF1F4 1px, transparent 1px) 0 0 / 100% 50px;">
+<div style="height: 101px; background: #1D5F70; border-radius: 4px 4px 0 0;"></div>
+<div style="height: 131px; background: #1D5F70; border-radius: 4px 4px 0 0;"></div>
+<div style="height: 114px; background: #1D5F70; border-radius: 4px 4px 0 0;"></div>
+<div style="height: 147px; background: #1D5F70; border-radius: 4px 4px 0 0;"></div>
+<div style="height: 122px; background: #1D5F70; border-radius: 4px 4px 0 0;"></div>
+<div style="height: 160px; background: #1D5F70; border-radius: 4px 4px 0 0; position: relative;"><span style="position: absolute; top: -22px; left: 0; right: 0; text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #151A21;">38</span></div>
+<div style="height: 139px; background: #1D5F70; border-radius: 4px 4px 0 0;"></div>
+<div style="height: 38px; background: #E1EEF0; border: 2px dashed #1D5F70; border-bottom: 0; box-sizing: border-box; border-radius: 4px 4px 0 0; position: relative;"><span style="position: absolute; top: -22px; left: -8px; right: -8px; text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #151A21;">9 so far</span></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 14px; padding: 0 4px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #414B57; text-align: center;"><span>04 Aug</span><span>11 Aug</span><span>18 Aug</span><span>25 Aug</span><span>01 Sep</span><span>08 Sep</span><span>15 Sep</span><span>This wk</span></div>
+</figure>
+<div style="font-size: 13px; color: #414B57;">Hover a bar for the split by type.</div>
+</section>
+
+<section aria-labelledby="load-h" style="background: #FFFFFF; border: 1px solid #DCE2E8; border-radius: 12px; padding: 22px 24px; display: flex; flex-direction: column; gap: 16px;">
+<div style="display: flex; flex-direction: column; gap: 2px;"><h2 id="load-h" style="margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 20px;">Workload by agent</h2><div style="font-size: 13px; color: #414B57;">Open requests with IT, right now</div></div>
+<dl style="margin: 0; display: flex; flex-direction: column; gap: 14px;">
+<div style="display: grid; grid-template-columns: 120px minmax(0, 1fr) 32px; gap: 12px; align-items: center;"><dt style="font-size: 14px;">Yousef Karam</dt><dd style="margin: 0; height: 14px; border-radius: 0 4px 4px 0;"><div style="width: 100%; height: 100%; background: #1D5F70; border-radius: 0 4px 4px 0;"></div></dd><dd style="margin: 0; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 14px;">8</dd></div>
+<div style="display: grid; grid-template-columns: 120px minmax(0, 1fr) 32px; gap: 12px; align-items: center;"><dt style="font-size: 14px;">Sara Qasim</dt><dd style="margin: 0; height: 14px;"><div style="width: 75%; height: 100%; background: #1D5F70; border-radius: 0 4px 4px 0;"></div></dd><dd style="margin: 0; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 14px;">6</dd></div>
+<div style="display: grid; grid-template-columns: 120px minmax(0, 1fr) 32px; gap: 12px; align-items: center;"><dt style="font-size: 14px;">Ahmad Nour</dt><dd style="margin: 0; height: 14px;"><div style="width: 37.5%; height: 100%; background: #1D5F70; border-radius: 0 4px 4px 0;"></div></dd><dd style="margin: 0; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 14px;">3</dd></div>
+<div style="display: grid; grid-template-columns: 120px minmax(0, 1fr) 32px; gap: 12px; align-items: center;"><dt style="font-size: 14px; color: #414B57;">Unassigned</dt><dd style="margin: 0; height: 14px;"><div style="width: 12.5%; height: 100%; background: #AD7A2C; border-radius: 0 4px 4px 0;"></div></dd><dd style="margin: 0; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 14px;">1</dd></div>
+</dl>
+</section>
+</div>
+
+<section aria-labelledby="od-h" style="background: #FFFFFF; border: 1px solid #DCE2E8; border-radius: 12px;">
+<div style="padding: 16px 24px; display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid #DCE2E8;"><h2 id="od-h" style="margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 20px;">Overdue queue</h2><a href="Stuck.dc.html" style="font-size: 14px; font-weight: 600; min-height: 44px; display: inline-flex; align-items: center;">See where everything is stuck</a></div>
+<table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+<thead><tr style="text-align: left; color: #414B57; font-size: 13px;"><th scope="col" style="padding: 10px 24px; font-weight: 600; border-bottom: 1px solid #DCE2E8;">Reference</th><th scope="col" style="padding: 10px 16px; font-weight: 600; border-bottom: 1px solid #DCE2E8;">Request</th><th scope="col" style="padding: 10px 16px; font-weight: 600; border-bottom: 1px solid #DCE2E8;">Held by</th><th scope="col" style="padding: 10px 24px; font-weight: 600; border-bottom: 1px solid #DCE2E8; text-align: right;">Overdue by</th></tr></thead>
+<tbody>
+<tr><td style="padding: 12px 24px; border-bottom: 1px solid #DCE2E8; font-family: 'IBM Plex Mono', monospace; font-size: 13px;"><a href="RequestDetail.dc.html">HLP-2026-1175</a></td><td style="padding: 12px 16px; border-bottom: 1px solid #DCE2E8;">Shared drive permissions for Finance</td><td style="padding: 12px 16px; border-bottom: 1px solid #DCE2E8;">Yousef Karam</td><td style="padding: 12px 24px; border-bottom: 1px solid #DCE2E8; text-align: right; font-family: 'IBM Plex Mono', monospace; color: #AE352A;">3d 00h</td></tr>
+<tr><td style="padding: 12px 24px; border-bottom: 1px solid #DCE2E8; font-family: 'IBM Plex Mono', monospace; font-size: 13px;"><a href="RequestDetail.dc.html">SUB-2026-0138</a></td><td style="padding: 12px 16px; border-bottom: 1px solid #DCE2E8;">Adobe Creative Cloud — renewal</td><td style="padding: 12px 16px; border-bottom: 1px solid #DCE2E8;">Layla Mansour</td><td style="padding: 12px 24px; border-bottom: 1px solid #DCE2E8; text-align: right; font-family: 'IBM Plex Mono', monospace; color: #AE352A;">0d 18h</td></tr>
+<tr><td style="padding: 12px 24px; border-bottom: 1px solid #DCE2E8; font-family: 'IBM Plex Mono', monospace; font-size: 13px;"><a href="RequestDetail.dc.html">HLP-2026-1169</a></td><td style="padding: 12px 16px; border-bottom: 1px solid #DCE2E8;">Meeting room screen not detected</td><td style="padding: 12px 16px; border-bottom: 1px solid #DCE2E8;">Sara Qasim</td><td style="padding: 12px 24px; border-bottom: 1px solid #DCE2E8; text-align: right; font-family: 'IBM Plex Mono', monospace; color: #AE352A;">0d 06h</td></tr>
+<tr><td style="padding: 12px 24px; font-family: 'IBM Plex Mono', monospace; font-size: 13px;"><a href="RequestDetail.dc.html">HLP-2026-1181</a></td><td style="padding: 12px 16px;">Outlook keeps asking for sign-in</td><td style="padding: 12px 16px; color: #414B57;">Unassigned</td><td style="padding: 12px 24px; text-align: right; font-family: 'IBM Plex Mono', monospace; color: #AE352A;">0d 02h</td></tr>
+</tbody>
+</table>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1120}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

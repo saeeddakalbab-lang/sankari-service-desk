@@ -1,0 +1,151 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "ApprovalLine.dc.html": {
+      "h": 1160,
+      "title": "Approval line component",
+      "w": 1440,
+      "x": 0,
+      "y": 2620
+    },
+    "Approvals.dc.html": {
+      "h": 1260,
+      "is_interactive": true,
+      "title": "4 · Approvals (CEO view)",
+      "w": 1440,
+      "x": 1520,
+      "y": 1240
+    },
+    "Main.dc.html": {
+      "h": 1120,
+      "is_interactive": true,
+      "title": "1 · Employee dashboard",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "NewRequest.dc.html": {
+      "h": 1060,
+      "is_interactive": true,
+      "title": "2 · Subscription form",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "RequestDetail.dc.html": {
+      "h": 1240,
+      "is_interactive": true,
+      "title": "3 · Request detail",
+      "w": 1440,
+      "x": 0,
+      "y": 1240
+    },
+    "HelpdeskForm.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 1080,
+      "title": "2b · IT Helpdesk form",
+      "is_interactive": true
+    },
+    "EmailAccountForm.dc.html": {
+      "x": 4560,
+      "y": 0,
+      "w": 1440,
+      "h": 1120,
+      "title": "2c · Email account form",
+      "is_interactive": true
+    },
+    "Login.dc.html": {
+      "x": 0,
+      "y": 4200,
+      "w": 1440,
+      "h": 960,
+      "title": "5 · Sign in",
+      "is_interactive": true
+    },
+    "EmployeeSettings.dc.html": {
+      "x": 1520,
+      "y": 4200,
+      "w": 1440,
+      "h": 920,
+      "title": "6 · Employee: my settings (dark mode)",
+      "is_interactive": true
+    },
+    "EmployeeHomeAR.dc.html": {
+      "x": 3040,
+      "y": 4200,
+      "w": 1440,
+      "h": 1000,
+      "title": "7 · Employee dashboard in Arabic (RTL)",
+      "is_interactive": true
+    },
+    "Stuck.dc.html": {
+      "x": 0,
+      "y": 5320,
+      "w": 1440,
+      "h": 1000,
+      "title": "8 · CEO & Board: where it’s stuck",
+      "is_interactive": true
+    },
+    "KPI.dc.html": {
+      "x": 1520,
+      "y": 5320,
+      "w": 1440,
+      "h": 1120,
+      "title": "9 · CEO & Board: live IT KPIs",
+      "is_interactive": true
+    },
+    "AdminSettings.dc.html": {
+      "x": 3040,
+      "y": 5320,
+      "w": 1440,
+      "h": 1380,
+      "title": "10 · Admin settings",
+      "is_interactive": true
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-23T13:12:26Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "title": {
+      "kind": "title1",
+      "maxW": 6000,
+      "text": "Sankari Portal — Employee → Manager → CEO",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "roles": {
+      "x": 0,
+      "y": 3900,
+      "text": "Sign-in and what each login sees",
+      "kind": "title1",
+      "maxW": 4480
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "NewRequest.dc.html",
+    "HelpdeskForm.dc.html",
+    "EmailAccountForm.dc.html",
+    "RequestDetail.dc.html",
+    "Approvals.dc.html",
+    "ApprovalLine.dc.html",
+    "Login.dc.html",
+    "EmployeeSettings.dc.html",
+    "EmployeeHomeAR.dc.html",
+    "Stuck.dc.html",
+    "KPI.dc.html",
+    "AdminSettings.dc.html"
+  ],
+  "pages": [],
+  "title": "Sankari Portal — Page Designs"
+}

@@ -4,6 +4,7 @@ import { pool,query } from "../lib/db";
 import { contractDocument, quoteDocument } from "../lib/contract-docs";
 import { listReceivables, receivablesXlsx } from "../lib/receivables";
 import { buildStatement, getAccounting } from "../lib/statements";
+import { buildReport, periodFor } from "../lib/reports";
 
 const requiredTables=["users","requests","comments","audit_log","email_outbox","jira_issues","migration_staging","settings","companies","services","subscriptions","purchase_requests","contracts","contract_line_items","invoices","payables","ledger_entries","contract_assignments"];
 const tables=await query<{table_name:string}>(`SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name = ANY($1::text[])`,[requiredTables]);
@@ -62,6 +63,11 @@ try {
 } finally { await query(`DELETE FROM contracts WHERE id=$1`, [docId]); }
 receivablesXlsx(await listReceivables());
 await buildStatement((await getAccounting()).openingMonth);
+// Both reports run their SQL on the real schema, weekly and monthly; a named sender passes the outbox check (021).
+for (const k of ["it", "dev"] as const) for (const c of ["weekly", "monthly"] as const) { const r = await buildReport(k, periodFor(c)); if (!r.html.includes("Report") || !r.file.length) throw new Error(`Report ${k} ${c} is empty`); }
+await query(`INSERT INTO email_outbox(event_key,recipient,subject,html,text_body,state,from_name,reply_to) VALUES('smoke-sender','x@sankari-holding.com','s','h','t','held','Saeed Dakalbab','saeed@sankari-holding.com')`);
+try { await query(`INSERT INTO email_outbox(event_key,recipient,subject,html,text_body,state,reply_to) VALUES('smoke-sender-bad','x@sankari-holding.com','s','h','t','held','not an email')`); throw new Error("A bad Reply-To was accepted"); } catch (e) { if (e instanceof Error && e.message === "A bad Reply-To was accepted") throw e; }
+await query(`DELETE FROM email_outbox WHERE event_key LIKE 'smoke-sender%'`);
 const freeze = await pool.connect();
 try {
   await freeze.query("BEGIN");

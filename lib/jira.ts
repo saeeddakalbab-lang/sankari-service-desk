@@ -23,12 +23,12 @@ export async function getJiraIssues(email?:string,name?:string){allowedFor(email
 export type JiraCounts={total:number;done:number;inProgress:number;todo:number;overdue:number};
 export type JiraSpace=JiraCounts&{key:string;name:string;people:number;assignees:(JiraCounts&{name:string;id:string|null})[]};
 export type JiraPerson={name:string;id:string;assigned:number;done:number;doneInPeriod:number;open:number;overdue:number;withDue:number;onTime:number;spaces:string[]};
-const DONE=`status_category='Done'`,PROG=`status_category='In Progress'`;
+export const DONE=`status_category='Done'`,PROG=`status_category='In Progress'`;
 const COUNTS=`count(*)::int total,count(*) FILTER (WHERE ${DONE})::int done,count(*) FILTER (WHERE ${PROG})::int "inProgress",
   count(*) FILTER (WHERE NOT (${DONE}) AND NOT (${PROG}))::int todo,count(*) FILTER (WHERE NOT (${DONE}) AND due_date<current_date)::int overdue`;
 // Jira Cloud hides people's email addresses, so a person is their Jira account id (then email, then name).
-const WHO=`coalesce(raw->'fields'->'assignee'->>'accountId',assignee_email,assignee_name)`;
-const COMPLETED=`coalesce(nullif(raw->'fields'->>'resolutiondate','')::timestamptz,jira_updated_at)`;
+export const WHO=`coalesce(raw->'fields'->'assignee'->>'accountId',assignee_email,assignee_name)`;
+export const COMPLETED=`coalesce(nullif(raw->'fields'->>'resolutiondate','')::timestamptz,jira_updated_at)`;
 export async function getJiraOverview(days:number){
   const names=(await query<{value:Record<string,string>}>(`SELECT value FROM system_state WHERE key='jira_projects'`)).rows[0]?.value??{};
   const spaces=(await query<JiraCounts&{key:string;people:number}>(`SELECT project_key key,${COUNTS},count(DISTINCT ${WHO})::int people FROM jira_issues GROUP BY 1`)).rows;

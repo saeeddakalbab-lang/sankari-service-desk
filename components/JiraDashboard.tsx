@@ -34,7 +34,7 @@ export function JiraDashboard() {
 
   return <div className="stack">
     <div className="row" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-      <div role="tablist" aria-label="Jira" className="seg">
+      <div role="tablist" aria-label="Dev Team KPI" className="seg">
         <button type="button" role="tab" aria-selected={tab === "overview"} aria-pressed={tab === "overview"} onClick={() => setTab("overview")}>{t("jr.overview")}</button>
         <button type="button" role="tab" aria-selected={tab === "mine"} aria-pressed={tab === "mine"} onClick={() => setTab("mine")}>{t("jr.mine")}</button>
       </div>

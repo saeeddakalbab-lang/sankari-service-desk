@@ -36,6 +36,7 @@ export function AppShell({user,approvals,ownsSubs=false,children}:{user:User;app
     {href:"/oversight",label:t("nav.stuck"),icon:<IconClock/>,group:"oversight",show:has(OVERSIGHT_ROLES)},
     {href:"/dashboard/kpi",label:t("nav.kpi"),icon:<IconChart/>,group:"oversight",show:has(OVERSIGHT_ROLES)},
     {href:"/dashboard/jira",label:t("nav.jira"),icon:<IconCode/>,group:"oversight",show:has(["dev","admin"])},
+    {href:"/admin/reports",label:t("nav.reports"),icon:<IconList/>,group:"oversight",show:has(["admin"])},
     {href:"/settings",label:t("nav.settings"),icon:<IconGear/>,group:"settings",show:true},
     {href:"/admin/settings",label:t("nav.admin"),icon:<IconShield/>,group:"settings",show:has(["admin"])},
   ];

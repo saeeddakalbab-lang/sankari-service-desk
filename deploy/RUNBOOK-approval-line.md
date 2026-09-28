@@ -467,3 +467,17 @@ Behaviour after deploy:
 - Accounting → Outstanding receivables: by company, Excel export, **Email to accounting** (to the
   address in Monthly statement → Settings), and **Payment received** to finish an invoice.
 - A contract already in `approved`/`contract_sent` (CT-2026-0001) is unaffected.
+
+# Step S: weekly and monthly reports (migration 021)
+
+Same routine: dump with `STEP=021`, rehearse, then deploy the site **and** the worker (the worker
+sends the reports).
+
+| Migration | What it does | Rollback |
+|---|---|---|
+| `021_email_sender.sql` | Adds `email_outbox.from_name` and `reply_to` (nullable, checked), so a report can show the chosen sender's name on the portal's mailbox and send replies to them. Existing emails keep NULL and send as before. No row is changed. | `db/rollback/021_email_sender.down.sql`: refuses while emails with a chosen sender are waiting; otherwise drops the two columns. |
+
+After deploy: Oversight → **Reports**. For the IT Infrastructure Report and the Dev Weekly Report,
+tick weekly and/or monthly, pick the sender and the recipients, set the weekly day and the time, and
+**Save**. Use **Preview** and **Excel** to check, and **Send now** for a first send. The sidebar's
+Jira item is now **Dev Team KPI**.

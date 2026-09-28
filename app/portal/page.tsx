@@ -1,6 +1,8 @@
 import { ProtectedPage } from "@/components/ProtectedPage";
 import { RequestList } from "@/components/RequestList";
 import { StartCards } from "@/components/StartCards";
+import { TeamPanel } from "@/components/TeamPanel";
+import { teamState } from "@/lib/team";
 import { getRules } from "@/lib/rules";
 import { listRequests } from "@/lib/requests";
 import { toRows } from "@/lib/rows";
@@ -12,6 +14,8 @@ const DAY=86400000;
 export default async function Dashboard(){
   const {user,t,locale}=await getViewer();
   const rows=user?await toRows(await listRequests(user)):[];
+  // Someone without a manager is asked who it is, until both sides have named each other.
+  const team=user?await teamState(user.id):null;
   const recent=(r:(typeof rows)[number])=>Date.now()-new Date(r.created_at).getTime()<30*DAY;
   const open=rows.filter(r=>!r.line.finished&&r.status!=="rejected").length,inApproval=rows.filter(r=>r.status==="awaiting_approval").length;
   const done=rows.filter(r=>r.line.finished&&r.status!=="rejected"&&recent(r)).length,rejected=rows.filter(r=>r.status==="rejected"&&recent(r)).length;
@@ -20,6 +24,7 @@ export default async function Dashboard(){
   const today=new Intl.DateTimeFormat(locale==="ar"?"ar":"en-GB",{weekday:"long",day:"numeric",month:"long",timeZone:"Asia/Dubai"}).format(new Date());
   return <ProtectedPage>
     <header className="page-head"><div className="stack-s"><div className="eyebrow">{today}</div><h1>{t(hour<12?"dash.greeting":hour<18?"dash.greetingDay":"dash.greetingEve",{name:first})}</h1></div></header>
+    {team?.needsManager&&<TeamPanel initial={JSON.parse(JSON.stringify(team))} mode="prompt"/>}
     <section aria-label={t("dash.summary")} className="grid-3">
       <div className="tile"><div className="tile-label">{t("dash.open")}</div><div className="tile-num">{open}</div><div className="tile-sub">{t("dash.openSub")}</div></div>
       <div className="tile"><div className="tile-label"><span className="dot gold" aria-hidden="true"/>{t("dash.inApproval")}</div><div className="tile-num">{inApproval}</div><div className="tile-sub">{t("dash.inApprovalSub")}</div></div>

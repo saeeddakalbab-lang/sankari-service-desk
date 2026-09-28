@@ -5,6 +5,7 @@ import { contractDocument, quoteDocument } from "../lib/contract-docs";
 import { listReceivables, receivablesXlsx } from "../lib/receivables";
 import { buildStatement, getAccounting } from "../lib/statements";
 import { buildReport, periodFor } from "../lib/reports";
+import { teamAction, teamState } from "../lib/team";
 
 const requiredTables=["users","requests","comments","audit_log","email_outbox","jira_issues","migration_staging","settings","companies","services","subscriptions","purchase_requests","contracts","contract_line_items","invoices","payables","ledger_entries","contract_assignments"];
 const tables=await query<{table_name:string}>(`SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name = ANY($1::text[])`,[requiredTables]);
@@ -77,6 +78,35 @@ try {
   try { await freeze.query(`UPDATE contracts SET client_details='{"title":"changed"}'::jsonb WHERE id=$1`, [id]); throw new Error("Client details changed after approval"); }
   catch (e) { if (e instanceof Error && e.message === "Client details changed after approval") throw e; await freeze.query("ROLLBACK TO SAVEPOINT s"); }
 } finally { await freeze.query("ROLLBACK"); freeze.release(); }
+// Manager matching (022): one side alone changes nothing; both sides, in either order, link them.
+{
+  const mk = async (e: string, n: string) => (await query<{ id: string }>(`INSERT INTO users(email,name,roles) VALUES($1,$2,'{employee}') RETURNING id`, [e, n])).rows[0].id;
+  const who = (id: string, email: string, name: string) => ({ id, email, name, image: null, roles: ["employee" as const] });
+  const [m, e1, e2] = [await mk("smoke.mgr@sankari-holding.com", "Smoke Manager"), await mk("smoke.e1@sankari-holding.com", "Smoke One"), await mk("smoke.e2@sankari-holding.com", "Smoke Two")];
+  const mgrOf = async (id: string) => (await query<{ manager_user_id: string | null }>(`SELECT manager_user_id FROM users WHERE id=$1`, [id])).rows[0].manager_user_id;
+  try {
+    // Employee first.
+    await teamAction(who(e1, "smoke.e1@sankari-holding.com", "Smoke One"), { action: "set_manager", email: "smoke.mgr@sankari-holding.com", name: "Smoke Manager" }, "");
+    if (await mgrOf(e1)) throw new Error("Naming a manager alone set the manager");
+    if (!(await teamState(m)).pending.length && !(await teamState(e1)).claim) throw new Error("The claim was not kept");
+    const r1 = await teamAction(who(m, "smoke.mgr@sankari-holding.com", "Smoke Manager"), { action: "add", email: "smoke.e1@sankari-holding.com" }, "");
+    if (!r1.matched || (await mgrOf(e1)) !== m) throw new Error("Employee-first match did not link them");
+    // Manager first, then the employee confirms the offer.
+    await teamAction(who(m, "smoke.mgr@sankari-holding.com", "Smoke Manager"), { action: "add", email: "smoke.e2@sankari-holding.com" }, "");
+    if (await mgrOf(e2)) throw new Error("Adding a team member alone set their manager");
+    const offer = (await teamState(e2)).offers[0];
+    if (!offer) throw new Error("The employee does not see the manager's offer");
+    const r2 = await teamAction(who(e2, "smoke.e2@sankari-holding.com", "Smoke Two"), { action: "accept", managerUserId: offer.managerUserId }, "");
+    if (!r2.matched || (await mgrOf(e2)) !== m) throw new Error("Manager-first match did not link them");
+    const roles = (await query<{ roles: string[] }>(`SELECT roles FROM users WHERE id=$1`, [m])).rows[0].roles;
+    if (!roles.includes("manager")) throw new Error("The manager did not get the Manager role");
+    if ((await teamState(m)).team.length !== 2) throw new Error("My team does not list both people");
+  } finally {
+    await query(`DELETE FROM email_outbox WHERE event_key LIKE 'team-%'`);
+    await query(`UPDATE users SET manager_user_id=NULL WHERE id = ANY($1::uuid[])`, [[e1, e2]]);
+    await query(`DELETE FROM users WHERE id = ANY($1::uuid[])`, [[m, e1, e2]]);
+  }
+}
 // The Jira overview is all aggregate SQL: run it empty, then with sample rows (a done issue with a
 // resolution date, an overdue one, an unassigned one with an empty date), then remove the samples.
 for(const d of [30,90,0])await getJiraOverview(d);

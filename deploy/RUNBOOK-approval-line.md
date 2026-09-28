@@ -481,3 +481,15 @@ After deploy: Oversight → **Reports**. For the IT Infrastructure Report and th
 tick weekly and/or monthly, pick the sender and the recipients, set the weekly day and the time, and
 **Save**. Use **Preview** and **Excel** to check, and **Send now** for a first send. The sidebar's
 Jira item is now **Dev Team KPI**.
+
+# Step T: people name their manager, managers name their team (migration 022)
+
+Same routine: dump with `STEP=022`, rehearse, deploy the site and the worker.
+
+| Migration | What it does | Rollback |
+|---|---|---|
+| `022_team_links.sql` | Adds `users.manager_claim_email/_name/_at` (who a person says their manager is) and the `team_claims` table (who a manager says is in their team). The app sets `users.manager_user_id` only when both sides name each other; admins still set managers in People. No row is changed. | `db/rollback/022_team_links.down.sql`: refuses while any claim exists; links already made stay. |
+
+After deploy: anyone without a manager (except the CEO, Owner and Board) sees **Who is your manager?**
+on the dashboard; managers add their people in **Settings → My team**. Whichever side comes second
+completes the link; both get an email, and the manager gets the Manager role.
